@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --gov-navy-950: #08192b;
+    --gov-navy-900: #0f2942;
+    --gov-navy-800: #163a5f;
+    --gov-navy-700: #1e4a7a;
+    --gov-navy-600: #2b5f9e;
+    
+    --gov-slate-50: #f8fafc;
+    --gov-slate-100: #f1f5f9;
+    --gov-slate-200: #e2e8f0;
+    --gov-slate-300: #cbd5e1;
+    --gov-slate-600: #475569;
+    --gov-slate-700: #334155;
+    --gov-slate-800: #1e293b;
+    --gov-slate-900: #0f172a;
+
+    --gov-emerald: #15803d;
+    --gov-emerald-light: #ecfdf5;
+    --gov-emerald-border: #a7f3d0;
+
+    --gov-amber: #b45309;
+    --gov-amber-light: #fffbeb;
+    --gov-amber-border: #fde68a;
+
+    --gov-crimson: #b91c1c;
+    --gov-crimson-light: #fef2f2;
+    --gov-crimson-border: #fecaca;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* Custom scrollbars for data tables and sidebars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print Styles for Official Legal Metrology Inspection Reports */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt;
+  }
+
+  header, nav, aside, .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  .print-report-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+}
