@@ -754,9 +754,45 @@ export const StepDeclarations: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Rule Ref */}
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                          {field.ruleRef}
+                        {/* Rule Ref & Knowledge Base Source Gazette */}
+                        <td className="py-3 px-4 text-[11px] text-slate-600">
+                          {(() => {
+                            const matchingDec = rawDecs.find(d =>
+                              d.declarationType.toLowerCase().includes(field.key.replace(/_/g, ' ')) ||
+                              field.label.toLowerCase().includes(d.declarationType.toLowerCase())
+                            );
+                            const matchingCheck = currentInspection.complianceChecks?.find(c => 
+                              c.ruleNo.toLowerCase() === field.ruleRef.toLowerCase() ||
+                              field.ruleRef.toLowerCase().includes(c.ruleNo.toLowerCase()) ||
+                              c.requirement.toLowerCase().includes(field.label.toLowerCase())
+                            );
+                            const srcPdf = matchingDec?.sourcePdf || matchingCheck?.sourcePdf || '8_1732871406--1.pdf';
+                            const srcPage = matchingDec?.sourcePdfPage || matchingCheck?.sourcePdfPage || 1;
+                            const srcShort = srcPdf.replace('.pdf', '').split('/').pop()?.split('\\').pop() || srcPdf;
+                            const amendCite = matchingDec?.amendmentCitation || matchingCheck?.amendmentCitation;
+
+                            return (
+                              <div className="space-y-1">
+                                <span className="font-mono font-semibold text-slate-900 block">{field.ruleRef}</span>
+                                <div className="flex items-center space-x-1 flex-wrap gap-y-0.5">
+                                  <span
+                                    className="inline-flex items-center text-[9px] font-medium bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded max-w-[140px] truncate"
+                                    title={`Source Gazette PDF: ${srcPdf}`}
+                                  >
+                                    📄 {srcShort}
+                                  </span>
+                                  <span className="inline-flex items-center text-[9px] font-bold font-mono text-blue-700 bg-blue-50 border border-blue-200 px-1 rounded">
+                                    p. {srcPage}
+                                  </span>
+                                </div>
+                                {amendCite && (
+                                  <span className="text-[9px] text-indigo-700 font-medium block truncate max-w-[180px]" title={amendCite}>
+                                    {amendCite}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Status Badge */}

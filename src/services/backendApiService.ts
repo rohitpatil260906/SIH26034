@@ -107,6 +107,11 @@ export interface ScanProcessApiResponse {
     bounding_box?: { x: number; y: number; width: number; height: number; label?: string };
     surface: string;
     is_applicable: boolean;
+    source_pdf?: string;
+    source_pdf_page?: number;
+    amendment_citation?: string;
+    effective_date?: string;
+    original_text?: string;
   }>;
   compliance_score: number;
   overall_status: 'COMPLIANT' | 'NON_COMPLIANT' | 'NEEDS_REVIEW';

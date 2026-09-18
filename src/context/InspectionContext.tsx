@@ -414,6 +414,10 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const vios: InspectionViolation[] = [];
 
             backendResponse.canonical_fields.forEach((field, idx) => {
+              const matchingCheck = backendResponse.compliance_checks.find(c => 
+                c.rule_no.toLowerCase().includes(field.field_name.toLowerCase()) || 
+                (c.detected_declaration && c.detected_declaration.toLowerCase().includes(field.field_name.toLowerCase()))
+              );
               decs.push({
                 id: `DEC-BK-${field.field_name}-${ts}-${idx}`,
                 declarationType: field.statutory_name || field.field_name,
@@ -426,7 +430,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 confidenceScore: field.confidence,
                 officerStatus: field.status === 'DETECTED' ? 'Verified' : 'Pending',
                 correctionNotes: field.is_uncertain ? 'Low confidence / ambiguous declaration requiring physical review.' : undefined,
-                boundingBox: field.bbox ? { ...field.bbox, label: field.statutory_name } : { x: 15, y: 15 + idx * 10, width: 70, height: 8, label: field.statutory_name }
+                boundingBox: field.bbox ? { ...field.bbox, label: field.statutory_name } : { x: 15, y: 15 + idx * 10, width: 70, height: 8, label: field.statutory_name },
+                sourcePdf: matchingCheck?.source_pdf,
+                sourcePdfPage: matchingCheck?.source_pdf_page,
+                amendmentCitation: matchingCheck?.amendment_citation,
+                effectiveDate: matchingCheck?.effective_date
               });
             });
 
@@ -445,7 +453,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                   evidenceImage: primaryImg.url,
                   evidenceBoundingBox: chk.bounding_box ? { ...chk.bounding_box, label: chk.rule_title } : { x: 15, y: 25, width: 70, height: 10, label: chk.rule_title },
                   recommendedPenalty: chk.section_penalty || 'Notice under Section 36(1). Compounding fee: ₹25,000.',
-                  reportedDate: new Date().toISOString().slice(0, 10)
+                  reportedDate: new Date().toISOString().slice(0, 10),
+                  sourcePdf: chk.source_pdf,
+                  sourcePdfPage: chk.source_pdf_page,
+                  amendmentCitation: chk.amendment_citation,
+                  effectiveDate: chk.effective_date
                 });
               }
             });
@@ -529,7 +541,12 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 evidenceSource: chk.detected_declaration,
                 evidenceBbox: chk.bounding_box,
                 evidenceSurface: chk.surface as SurfaceType,
-                penalRef: chk.section_penalty || undefined
+                penalRef: chk.section_penalty || undefined,
+                sourcePdf: chk.source_pdf,
+                sourcePdfPage: chk.source_pdf_page,
+                amendmentCitation: chk.amendment_citation,
+                effectiveDate: chk.effective_date,
+                originalText: chk.original_text
               })),
               complianceScore: backendResponse.compliance_score,
               ocrResult: {

@@ -611,3 +611,235 @@ export const LEGAL_RULES: LegalRuleItem[] = [
     officerGuidance: 'Enforcement actions must cite the 2011 Rules as amended.'
   }
 ];
+
+export const STATUTORY_GAZETTE_CITATIONS: Record<string, {
+  sourcePdf: string;
+  sourcePdfPage: number;
+  amendmentCitation: string;
+  effectiveDate: string;
+}> = {
+  'RULE-1': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 1,
+    amendmentCitation: 'G.S.R. 202(E) / 2023.01.27 amendment in PCR_1732871665---25.pdf (p. 2)',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-2': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 1,
+    amendmentCitation: 'G.S.R. 779(E) Legal Metrology Definitions & E-commerce',
+    effectiveDate: '1st January, 2023'
+  },
+  'RULE-3': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 4,
+    amendmentCitation: 'G.S.R. 202(E) Chapter II Scope (Exemption >25kg/25L, Bags >50kg)',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-4': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 4,
+    amendmentCitation: 'G.S.R. 202(E) Regulation for pre-packing & sale',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-5': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 5,
+    amendmentCitation: 'G.S.R. 577(E) Rationalized Second Schedule Commodities',
+    effectiveDate: '14th July, 2022'
+  },
+  'RULE-6-1-A': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 5,
+    amendmentCitation: 'G.S.R. 779(E) Read with Rule 10 Complete Address & PIN code',
+    effectiveDate: '1st December, 2022'
+  },
+  'RULE-6-1-B': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 5,
+    amendmentCitation: 'G.S.R. 202(E) Generic or Common Name on PDP',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-6-1-C': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 6,
+    amendmentCitation: 'G.S.R. 202(E) Metric SI Net Quantity Symbols (Rules 11-13)',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-6-1-D': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 6,
+    amendmentCitation: 'G.S.R. 779(E) Month and Year of Manufacture / Packing',
+    effectiveDate: '1st December, 2022'
+  },
+  'RULE-6-1-DA': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 6,
+    amendmentCitation: 'G.S.R. 385(E) Best Before / Expiry for Perishables',
+    effectiveDate: '14th May, 2015'
+  },
+  'RULE-6-1-E': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 6,
+    amendmentCitation: 'G.S.R. 779(E) Maximum Retail Price (MRP) incl. of all taxes',
+    effectiveDate: '1st January, 2022'
+  },
+  'RULE-6-1-EA': {
+    sourcePdf: 'The Legal Metrology (Packaged Commodities) (Amendment) Rules, 2021_1732871439--2.pdf',
+    sourcePdfPage: 2,
+    amendmentCitation: 'G.S.R. 779(E) Unit Sale Price (USP) per g/ml/piece',
+    effectiveDate: '1st December, 2022'
+  },
+  'RULE-6-1-F': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 7,
+    amendmentCitation: 'G.S.R. 202(E) Consumer Care Contact Details',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-6-1-G': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 7,
+    amendmentCitation: 'G.S.R. 202(E) Batch / Lot / Dimensions Declaration',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-6-10': {
+    sourcePdf: '8(10)_0_1732861286--10.pdf',
+    sourcePdfPage: 1,
+    amendmentCitation: 'G.S.R. 629(E) E-Commerce Mandatory Declarations',
+    effectiveDate: '23rd June, 2017'
+  },
+  'RULE-6-11': {
+    sourcePdf: 'The Legal Metrology (Packaged Commodities) (Amendment) Rules, 2021_1732871439--2.pdf',
+    sourcePdfPage: 2,
+    amendmentCitation: 'G.S.R. 779(E) Unit Sale Price Rounded to Nearest Two Decimal Places',
+    effectiveDate: '1st December, 2022'
+  },
+  'RULE-7': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 8,
+    amendmentCitation: 'G.S.R. 202(E) Wholesale Package Declarations',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-8': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 9,
+    amendmentCitation: 'G.S.R. 202(E) General Provisions Relating to Declarations',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-9': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 9,
+    amendmentCitation: 'G.S.R. 202(E) Principal Display Panel Size & Typography',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-10': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 10,
+    amendmentCitation: 'G.S.R. 779(E) Name and Complete Address with 6-digit Postal PIN code',
+    effectiveDate: '1st January, 2022'
+  },
+  'RULE-11': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 11,
+    amendmentCitation: 'G.S.R. 202(E) Net Quantity Declaration General Requirements',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-12': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 12,
+    amendmentCitation: 'G.S.R. 202(E) Units of Weight, Measure or Number',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-13': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 13,
+    amendmentCitation: 'G.S.R. 202(E) Table 1 Minimum Numeral Height Specifications',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-14': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 14,
+    amendmentCitation: 'G.S.R. 202(E) Combination Packages Declarations',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-15': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 15,
+    amendmentCitation: 'G.S.R. 202(E) Group Packages Declarations',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-16': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 15,
+    amendmentCitation: 'G.S.R. 629(E) E-commerce Marketplace Display',
+    effectiveDate: '23rd June, 2017'
+  },
+  'RULE-18': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 16,
+    amendmentCitation: 'G.S.R. 202(E) Prohibition of Overcharging above MRP',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-24': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 18,
+    amendmentCitation: 'G.S.R. 202(E) Wholesale Packages Exemption Criteria',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-26': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 19,
+    amendmentCitation: 'G.S.R. 202(E) Small Package Exemption (<=10g or 10ml)',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-26-E': {
+    sourcePdf: '2022 3rd amendment in PCR Garments_1733228786--22.pdf',
+    sourcePdfPage: 2,
+    amendmentCitation: 'G.S.R. 648(E) Exemption for Loose Garments / Metric Sizing in cm or m',
+    effectiveDate: '1st January, 2023'
+  },
+  'RULE-27': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 20,
+    amendmentCitation: 'G.S.R. 202(E) Registration of Manufacturers and Importers',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-32': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 22,
+    amendmentCitation: 'G.S.R. 202(E) General Residual Penalty Clause',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-32A': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 23,
+    amendmentCitation: 'G.S.R. 779(E) Compounding Table under Section 48 / Section 36(1)',
+    effectiveDate: '1st January, 2022'
+  },
+  'RULE-33': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 24,
+    amendmentCitation: 'G.S.R. 202(E) Power of Central Government to Relax Rules',
+    effectiveDate: '1st April, 2011'
+  },
+  'RULE-34': {
+    sourcePdf: '8_1732871406--1.pdf',
+    sourcePdfPage: 25,
+    amendmentCitation: 'G.S.R. 202(E) Repeal and Savings (Repeal of 1977 Rules)',
+    effectiveDate: '1st April, 2011'
+  }
+};
+
+// Automatically enrich LEGAL_RULES with authoritative Knowledge Base citations
+LEGAL_RULES.forEach(r => {
+  const cite = STATUTORY_GAZETTE_CITATIONS[r.id];
+  if (cite) {
+    r.sourcePdf = cite.sourcePdf;
+    r.sourcePdfPage = cite.sourcePdfPage;
+    r.amendmentCitation = cite.amendmentCitation;
+    r.effectiveDate = cite.effectiveDate;
+  } else {
+    r.sourcePdf = '8_1732871406--1.pdf';
+    r.sourcePdfPage = 1;
+  }
+});

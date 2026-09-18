@@ -871,6 +871,34 @@ export function evaluateLegalMetrologyRules(
     });
   });
 
+  // Enrich every check and violation with exact Knowledge Base citations
+  checks.forEach((c) => {
+    const r = LEGAL_RULES.find((lr) => lr.id === c.ruleId || lr.ruleNo === c.ruleNo);
+    if (r) {
+      if (!c.sourcePdf) c.sourcePdf = r.sourcePdf || '8_1732871406--1.pdf';
+      if (!c.sourcePdfPage) c.sourcePdfPage = r.sourcePdfPage || 1;
+      if (!c.amendmentCitation) c.amendmentCitation = r.amendmentCitation;
+      if (!c.effectiveDate) c.effectiveDate = r.effectiveDate;
+      if (!c.originalText) c.originalText = r.requirement;
+    }
+  });
+
+  violations.forEach((v) => {
+    const r = LEGAL_RULES.find(
+      (lr) =>
+        lr.ruleNo === v.ruleReference ||
+        v.ruleReference.includes(lr.ruleNo) ||
+        lr.title.toLowerCase().includes(v.violationType.toLowerCase())
+    );
+    if (r) {
+      if (!v.sourcePdf) v.sourcePdf = r.sourcePdf || '8_1732871406--1.pdf';
+      if (!v.sourcePdfPage) v.sourcePdfPage = r.sourcePdfPage || 1;
+      if (!v.amendmentCitation) v.amendmentCitation = r.amendmentCitation;
+      if (!v.effectiveDate) v.effectiveDate = r.effectiveDate;
+      if (!v.expectedRequirement) v.expectedRequirement = r.requirement;
+    }
+  });
+
   // Calculate Summary Counts
   const passed = checks.filter((c) => c.status === 'PASS').length;
   const failed = checks.filter((c) => c.status === 'FAIL').length;

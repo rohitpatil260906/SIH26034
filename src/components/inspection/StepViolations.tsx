@@ -101,19 +101,39 @@ export const StepViolations: React.FC = () => {
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <span className="text-[10px] font-mono text-slate-500 block">
-                            {vio.id} • {vio.ruleReference}
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 mt-0.5">
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <span className="text-[10px] font-mono font-bold text-slate-700">
+                              {vio.ruleReference}
+                            </span>
+                            <span
+                              className="text-[9px] font-medium bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded truncate max-w-[150px]"
+                              title={`Gazette PDF: ${vio.sourcePdf || '8_1732871406--1.pdf'}`}
+                            >
+                              📄 {(vio.sourcePdf || '8_1732871406--1.pdf').replace('.pdf', '')}
+                            </span>
+                            <span className="text-[9px] font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 rounded">
+                              p. {vio.sourcePdfPage || 1}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-900 mt-1">
                             {vio.violationType}
                           </h4>
                         </div>
                         <SeverityBadge severity={vio.severity} />
                       </div>
 
-                      <p className="text-[11px] text-slate-600 line-clamp-2">
-                        {vio.description}
-                      </p>
+                      <div className="bg-slate-50 p-2 rounded border border-slate-200 text-[11px] space-y-1">
+                        <div>
+                          <span className="font-semibold text-slate-700">Detected: </span>
+                          <span className="text-slate-900">{vio.description}</span>
+                        </div>
+                        {vio.expectedRequirement && (
+                          <div>
+                            <span className="font-semibold text-slate-700">Expected: </span>
+                            <span className="text-slate-800">{vio.expectedRequirement}</span>
+                          </div>
+                        )}
+                      </div>
 
                       <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-100 flex items-center justify-between">
                         <span>Panel: {vio.surface}</span>
@@ -212,14 +232,57 @@ export const StepViolations: React.FC = () => {
               </div>
 
               {selectedViolation && (
-                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-md text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">Recommended Statutory Proceeding:</span>
-                    <span className="font-mono text-slate-600 text-[11px]">{selectedViolation.statutoryActClause}</span>
+                <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-md text-xs space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-slate-900">Statutory Citation:</span>
+                      <span className="font-mono text-blue-900 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[11px]">
+                        {selectedViolation.ruleReference}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] font-semibold bg-white border border-slate-300 px-2 py-0.5 rounded text-slate-700">
+                        📄 Source PDF: {selectedViolation.sourcePdf || '8_1732871406--1.pdf'}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded text-amber-900">
+                        Page {selectedViolation.sourcePdfPage || 1}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-slate-700 text-[11px] leading-relaxed">
-                    {selectedViolation.recommendedPenalty}
-                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 bg-red-50/70 border border-red-200 rounded">
+                      <span className="font-bold text-red-950 block mb-0.5">What Was Detected on Packaging:</span>
+                      <span className="text-red-900 leading-relaxed block">
+                        {selectedViolation.description}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-emerald-50/70 border border-emerald-200 rounded">
+                      <span className="font-bold text-emerald-950 block mb-0.5">Statutory Expected Requirement:</span>
+                      <span className="text-emerald-900 leading-relaxed block">
+                        {selectedViolation.expectedRequirement || 'Strict compliance with ' + selectedViolation.ruleReference}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedViolation.amendmentCitation && (
+                    <div className="text-[10px] text-slate-600 bg-white p-1.5 rounded border border-slate-200 flex items-center justify-between">
+                      <span><span className="font-semibold text-slate-800">Gazette Amendment:</span> {selectedViolation.amendmentCitation}</span>
+                      {selectedViolation.effectiveDate && (
+                        <span className="font-mono text-slate-500">Effective: {selectedViolation.effectiveDate}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="pt-1 border-t border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900">Recommended Statutory Proceeding: </span>
+                      <span className="font-mono text-slate-600 text-[11px]">{selectedViolation.statutoryActClause}</span>
+                    </div>
+                    <span className="text-red-700 font-semibold text-[11px]">
+                      {selectedViolation.recommendedPenalty}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

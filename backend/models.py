@@ -229,6 +229,11 @@ class ComplianceCheckItem(BaseModel):
     is_applicable: bool = True
     applicability_reason: Optional[str] = None
     evidence_crop_base64: Optional[str] = None
+    source_pdf: Optional[str] = None
+    source_pdf_page: Optional[int] = None
+    amendment_citation: Optional[str] = None
+    effective_date: Optional[str] = None
+    original_text: Optional[str] = None
 
 # ----------------------------------------------------
 # STAGE 4: PIPELINE REQUEST / RESPONSE & BENCHMARK MODELS

@@ -39,6 +39,10 @@ export interface ExtractedDeclaration {
   officerStatus: 'Verified' | 'Edited' | 'Flagged' | 'Pending';
   correctionNotes?: string;
   boundingBox?: BoundingBox;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
 }
 
 export interface InspectionViolation {
@@ -56,6 +60,12 @@ export interface InspectionViolation {
   officerComments?: string;
   recommendedPenalty: string;
   reportedDate: string;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  expectedRequirement?: string;
+  detectedText?: string;
 }
 
 export interface InspectionImage {
@@ -240,6 +250,11 @@ export interface ComplianceCheckItem {
   evidenceSurface?: SurfaceType;
   reason?: string;
   penalRef?: string;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  originalText?: string;
 }
 
 export interface InspectionRecord {
@@ -319,6 +334,11 @@ export interface LegalRuleItem {
   lastUpdated: string;
   officerGuidance: string;
   fontTable?: Array<{ area: string; minHeightNormal: string; minHeightBlowMoulded: string }>;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  originalText?: string;
 }
 
 export interface AuditLogItem {

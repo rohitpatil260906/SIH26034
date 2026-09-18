@@ -185,27 +185,36 @@ def generate_statutory_pdf_report(scan: ScanProcessResponse) -> str:
     story.append(Spacer(1, 10))
 
     # SECTION 2: COMPLIANCE CHECK
-    story.append(Paragraph("2. STATUTORY LEGAL METROLOGY RULES COMPLIANCE AUDIT", heading2_style))
+    story.append(Paragraph("2. STATUTORY LEGAL METROLOGY RULES COMPLIANCE AUDIT (SOURCE-OF-TRUTH GAZETTE CITATIONS)", heading2_style))
     
     chk_data = [
         [
-            Paragraph("<b>Rule</b>", cell_bold_style),
+            Paragraph("<b>Rule & Gazette Citation</b>", cell_bold_style),
             Paragraph("<b>Requirement & Sub-Rule</b>", cell_bold_style),
             Paragraph("<b>Audited Finding / Declaration</b>", cell_bold_style),
             Paragraph("<b>Verdict</b>", cell_bold_style)
         ]
     ]
     
-    for chk in scan.compliance_checks[:14]:  # Primary critical rules on page
-        v_color = "#15803d" if chk.status == "PASS" else ("#b91c1c" if chk.status == "FAIL" else "#d97706")
+    for chk in scan.compliance_checks[:16]:  # Primary critical rules on page
+        v_color = "#15803d" if chk.status == "PASS" else ("#b91c1c" if chk.status == "FAIL" else ("#64748b" if chk.status == "NOT APPLICABLE" else "#d97706"))
+        source_cite = ""
+        if chk.source_pdf:
+            pdf_short = chk.source_pdf.split("/")[-1].split("\\")[-1]
+            if len(pdf_short) > 28:
+                pdf_short = pdf_short[:25] + "..."
+            source_cite = f"<br/><font size=6 color='#475569'><b>Gazette PDF:</b> {pdf_short} (p. {chk.source_pdf_page or 1})</font>"
+            if chk.amendment_citation:
+                source_cite += f"<br/><font size=5.5 color='#2563eb'>{chk.amendment_citation}</font>"
+        
         chk_data.append([
-            Paragraph(chk.rule_no, cell_bold_style),
+            Paragraph(f"<b>{chk.rule_no}</b>{source_cite}", cell_style),
             Paragraph(f"<b>{chk.rule_title}</b><br/>{chk.sub_rule}", cell_style),
             Paragraph(chk.detected_declaration, cell_style),
             Paragraph(f"<font color='{v_color}'><b>{chk.status}</b></font>", cell_style)
         ])
         
-    chk_table = Table(chk_data, colWidths=[1.1*inch, 2.5*inch, 2.7*inch, 0.9*inch])
+    chk_table = Table(chk_data, colWidths=[1.8*inch, 2.1*inch, 2.4*inch, 0.9*inch])
     chk_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#cbd5e1')),
@@ -221,14 +230,15 @@ def generate_statutory_pdf_report(scan: ScanProcessResponse) -> str:
         story.append(Paragraph("3. STATUTORY VIOLATIONS & PENAL ACTION RECOMMENDATIONS", heading2_style))
         vio_data = [
             [
-                Paragraph("<b>Infraction Clause</b>", cell_bold_style),
+                Paragraph("<b>Infraction Clause & Source PDF</b>", cell_bold_style),
                 Paragraph("<b>Detected Packaging Finding</b>", cell_bold_style),
                 Paragraph("<b>Statutory Penalty / Compounding</b>", cell_bold_style)
             ]
         ]
         for inf in infractions:
+            src_str = f"<br/><font size=6 color='#64748b'>Source: {inf.source_pdf or 'PCR 2011'} (p. {inf.source_pdf_page or 1})</font>" if inf.source_pdf else ""
             vio_data.append([
-                Paragraph(f"<b>{inf.rule_no}</b> ({inf.rule_title})", cell_bold_style),
+                Paragraph(f"<b>{inf.rule_no}</b> ({inf.rule_title}){src_str}", cell_bold_style),
                 Paragraph(inf.detected_declaration, cell_style),
                 Paragraph(inf.section_penalty or "Section 36(1) Compounding fee: ₹25,000", cell_style)
             ])
@@ -344,18 +354,21 @@ def generate_statutory_docx_report(scan: ScanProcessResponse) -> str:
     # Violations
     infractions = [c for c in scan.compliance_checks if c.status == "FAIL"]
     if infractions:
-        doc.add_heading("3. Statutory Violations & Compounding Directives", level=2)
-        v_table = doc.add_table(rows=1, cols=3)
+        doc.add_heading("3. Statutory Violations & Compounding Directives (Legal Metrology Rules)", level=2)
+        v_table = doc.add_table(rows=1, cols=4)
         v_cells = v_table.rows[0].cells
-        v_cells[0].text = 'Rule'
+        v_cells[0].text = 'Rule & Gazette PDF'
         v_cells[1].text = 'Detected Infraction'
         v_cells[2].text = 'Penal Provision'
+        v_cells[3].text = 'Source Page'
         
         for inf in infractions:
             v_row = v_table.add_row().cells
-            v_row[0].text = f"{inf.rule_no} ({inf.rule_title})"
+            src = f" [{inf.source_pdf.split('/')[-1].split(chr(92))[-1]}]" if inf.source_pdf else ""
+            v_row[0].text = f"{inf.rule_no} ({inf.rule_title}){src}"
             v_row[1].text = inf.detected_declaration
             v_row[2].text = inf.section_penalty or "Section 36(1) Compounding fee: ₹25,000"
+            v_row[3].text = f"Page {inf.source_pdf_page}" if inf.source_pdf_page else "Principal Rules"
 
     doc.save(report_path)
     return report_path
