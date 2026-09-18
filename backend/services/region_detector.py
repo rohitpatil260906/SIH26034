@@ -179,46 +179,58 @@ def detect_regions_of_interest(
     for bx, by, bw, bh in barcode_boxes[:2]:
         add_region("Barcode", bx, by, bw, bh, 0.96, "Scharr Gradient Analysis")
 
-    # Associate regions from spatial layout
-    # Top 30% typically contains Product Name, Brand, Generic Name
-    top_boxes = [b for b in raw_boxes if b[1] < h * 0.35]
-    if top_boxes:
-        pname_box = max(top_boxes, key=lambda b: b[2] * b[3])
-        add_region("Product Name", pname_box[0], pname_box[1], pname_box[2], pname_box[3], 0.95)
-        add_region("Main Label", int(w * 0.05), int(h * 0.05), int(w * 0.90), int(h * 0.35), 0.93)
+    # Associate regions from spatial layout and morphological contours
+    # If text hints are provided (from OCR passes or canonical fields), ground regions dynamically
+    if extracted_text_hints:
+        for hint in extracted_text_hints:
+            txt = str(hint.get("text", "")).lower()
+            h_box = hint.get("bbox")
+            if not h_box:
+                continue
+            if hasattr(h_box, 'pixel_coords') and h_box.pixel_coords:
+                hx, hy, hx2, hy2 = h_box.pixel_coords
+                h_bw, h_bh = hx2 - hx, hy2 - hy
+            else:
+                hx = int((getattr(h_box, 'x', 0) / 100.0) * w)
+                hy = int((getattr(h_box, 'y', 0) / 100.0) * h)
+                h_bw = int((getattr(h_box, 'width', 20) / 100.0) * w)
+                h_bh = int((getattr(h_box, 'height', 5) / 100.0) * h)
 
-    # Middle 35%-65% typically contains Net Quantity, Nutrition, Manufacturer Address
-    mid_boxes = [b for b in raw_boxes if h * 0.30 <= b[1] <= h * 0.70]
-    for b in mid_boxes[:4]:
-        # Small compact box with aspect ratio around 2-4 often contains Net Qty
-        aspect = b[2] / float(b[3])
-        if "Net Quantity Area" not in added_categories and 1.5 <= aspect <= 6.0 and b[2] < w * 0.6:
-            add_region("Net Quantity Area", b[0], b[1], b[2], b[3], 0.94)
-        elif "Manufacturer Details" not in added_categories and (b[2] > w * 0.4 or b[3] > h * 0.08):
-            add_region("Manufacturer Details", b[0], b[1], b[2], b[3], 0.92)
+            cat = "Text Region"
+            if any(k in txt for k in ["mrp", "m.r.p", "₹", "rs.", "inr"]):
+                cat = "MRP Area"
+            elif any(k in txt for k in ["net wt", "net qty", "net weight", "net content", "net quantity", "शुद्ध"]):
+                cat = "Net Quantity Area"
+            elif any(k in txt for k in ["mfd", "mfg", "pkd", "packed", "manufactured on", "तिथि"]):
+                cat = "Manufacturing Date Area"
+            elif any(k in txt for k in ["care", "helpline", "toll free", "toll-free", "consumer", "feedback"]):
+                cat = "Consumer Care Details"
+            elif any(k in txt for k in ["mfg by", "manufactured by", "packed by", "marketed by"]):
+                cat = "Manufacturer Details"
+            elif any(k in txt for k in ["batch", "lot no", "lot"]):
+                cat = "Batch Number Area"
+            
+            if cat != "Text Region" and cat not in added_categories:
+                add_region(cat, hx, hy, h_bw, h_bh, 0.96, "OCR Spatial Grounding")
 
-    # Bottom 35% typically contains MRP, Dates, Batch Number, Consumer Care
-    bottom_boxes = [b for b in raw_boxes if b[1] > h * 0.60]
-    for b in bottom_boxes[:5]:
-        if "MRP Area" not in added_categories and b[2] < w * 0.7:
-            add_region("MRP Area", b[0], b[1], b[2], b[3], 0.96)
-        elif "Manufacturing Date Area" not in added_categories and b[2] < w * 0.6:
-            add_region("Manufacturing Date Area", b[0], b[1], b[2], b[3], 0.93)
-        elif "Consumer Care Details" not in added_categories:
-            add_region("Consumer Care Details", b[0], b[1], b[2], b[3], 0.91)
-        elif "Batch Number Area" not in added_categories:
-            add_region("Batch Number Area", b[0], b[1], b[2], b[3], 0.90)
+    # Dynamic classification of remaining prominent morphological text contours
+    sorted_by_area = sorted(raw_boxes, key=lambda b: b[2] * b[3], reverse=True)
+    if sorted_by_area and "Product Name" not in added_categories:
+        pname_box = sorted_by_area[0]
+        add_region("Product Name", pname_box[0], pname_box[1], pname_box[2], pname_box[3], 0.95, "Salient Text Cluster")
 
-    # If any mandatory categories were not partitioned by morphological grouping,
-    # create targeted search zones so the entire label is indexed
-    if "MRP Area" not in added_categories:
-        add_region("MRP Area", int(w * 0.10), int(h * 0.65), int(w * 0.80), int(h * 0.12), 0.88, "Targeted Panel Scan")
-    if "Net Quantity Area" not in added_categories:
-        add_region("Net Quantity Area", int(w * 0.10), int(h * 0.45), int(w * 0.60), int(h * 0.10), 0.88, "Targeted Panel Scan")
-    if "Manufacturer Details" not in added_categories:
-        add_region("Manufacturer Details", int(w * 0.08), int(h * 0.55), int(w * 0.84), int(h * 0.18), 0.85, "Targeted Panel Scan")
-    if "Manufacturing Date Area" not in added_categories:
-        add_region("Manufacturing Date Area", int(w * 0.10), int(h * 0.78), int(w * 0.75), int(h * 0.10), 0.85, "Targeted Panel Scan")
+    # Add significant text blocks based on their morphological aspects
+    for b in sorted_by_area[1:10]:
+        aspect = b[2] / float(b[3]) if b[3] > 0 else 1.0
+        area_ratio = (b[2] * b[3]) / float(w * h)
+        if area_ratio > 0.003:  # Valid text declaration block
+            if aspect > 5.0:
+                cat = "Mandatory Declaration Line"
+            elif aspect > 2.0:
+                cat = "Declaration Text Block"
+            else:
+                cat = "Coding / Matrix Panel"
+            add_region(cat, b[0], b[1], b[2], b[3], 0.92, "Morphological Contour")
 
     # Assemble LabelMe Annotation
     labelme_ann = LabelMeAnnotation(

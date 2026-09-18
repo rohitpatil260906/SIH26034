@@ -37,12 +37,12 @@ MRP_PATTERNS = [
 ]
 
 TAX_PHRASE_REGEX = re.compile(
-    r'(?:incl(?:usive)?\.?\s*(?:of)?\s*all\s*taxes|incl\.?\s*taxes|inc[l1]\.?\s*taxes|सभी\s*करों\s*सहित|कर\s*सहित)',
+    r'(?:[1iI]nc[l1I](?:usive)?\.?\s*(?:of)?\s*(?:al[l1I]\s*)?tax(?:es)?|[1iI]ncl\.?\s*tax(?:es)?|incl(?:usive)?\.?\s*(?:of)?\s*all\s*taxes|incl\.?\s*taxes|inc[l1]\.?\s*taxes|सभी\s*करों\s*सहित|कर\s*सहित)',
     re.I
 )
 
 USP_PATTERN = re.compile(
-    r'(?:U\.?S\.?P\.?|UNIT\s*SALE\s*PRICE)\s*[:.\-\s]*\s*(?:₹|Rs\.?|INR)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:\/|\s*per\s*)(g|kg|ml|l|piece|unit|u|n)\b',
+    r'(?:U\.?S\.?P\.?|UNIT\s*SALE\s*PRICE)\s*[:.\-\s]*\s*(?:₹|Rs\.?|INR)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:\/|\s*per\s*)\s*(g|kg|ml|l|piece|unit|u|n)\b',
     re.I
 )
 
@@ -444,6 +444,8 @@ def process_and_classify_text(
             is_exempt=True,
             exemption_reason="Package net quantity <= 100g/ml is statutorily exempt from declaring USP."
         )
+    else:
+        data.unit_sale_price = UnitSalePriceInfo(raw_text="Not detected", value_per_unit=None, is_exempt=False)
 
     # -------------------------------------------------------------------------
     # 5. Manufacturer Address & Postal PIN code (Rule 6(1)(a) & Rule 10)

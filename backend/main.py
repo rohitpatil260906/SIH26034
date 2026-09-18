@@ -273,7 +273,8 @@ def process_scan(request: ScanProcessRequest):
     compliance_checks, compliance_score, overall_status = evaluate_legal_metrology_rules(
         product_data,
         surface=surface,
-        is_image_degraded=is_degraded
+        is_image_degraded=is_degraded,
+        surfaces_processed=surfaces_processed
     )
 
     # External Verification Abstraction

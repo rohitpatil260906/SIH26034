@@ -53,6 +53,7 @@ def normalize_ocr_token(text: str) -> str:
     t = re.sub(r'\bM\.?R\.?P\b', 'MRP', t, flags=re.I)
     
     # Common OCR confusions in taxes clause
+    t = re.sub(r'[1iI]nc[l1I](?:\.|\b)\s*(?:of)?\s*(?:al[l1I]\s*)?taxes', 'inclusive of all taxes', t, flags=re.I)
     t = re.sub(r'incl(?:\.|\b)\s*(?:of)?\s*al[l1]\s*taxes', 'inclusive of all taxes', t, flags=re.I)
     t = re.sub(r'inc[l1]\.?\s*taxes', 'incl. of all taxes', t, flags=re.I)
     

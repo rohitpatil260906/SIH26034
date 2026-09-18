@@ -20,7 +20,8 @@ def load_statutory_rules_library() -> List[Dict[str, Any]]:
 def evaluate_legal_metrology_rules(
     data: StructuredProductData,
     surface: str = "Front (PDP)",
-    is_image_degraded: bool = False
+    is_image_degraded: bool = False,
+    surfaces_processed: List[str] = None
 ) -> Tuple[List[ComplianceCheckItem], int, str]:
     """Evaluates the 34 statutory Legal Metrology (Packaged Commodities) Rules, 2011
     plus Rule 32A Compounding Provisions, Rule 26 statutory exemptions, and category-specific
@@ -30,12 +31,21 @@ def evaluate_legal_metrology_rules(
     - PASS: Verified compliant with statutory rule.
     - FAIL: Active statutory infraction (e.g. non-SI 'gms', missing taxes phrase, missing PIN code).
     - WARN: Advisory observation.
-    - NEEDS REVIEW: OCR disagreement, smudged stamp, or ambiguous text requiring inspector physical review.
+    - NEEDS REVIEW: OCR disagreement, smudged stamp, uncalibrated optical gauge, or single-surface ambiguity.
     - NOT DETECTED: 'Unable to verify from image' when image quality is poor (never falsely fails a product).
     - NOT APPLICABLE: Statutory exemptions (e.g. Rule 26(a) <= 10g, Rule 6(11) USP exemption for <= 100g/ml).
     """
     checks: List[ComplianceCheckItem] = []
     kb = get_knowledge_base()
+
+    if surfaces_processed is None:
+        surfaces_processed = [surface]
+    
+    # Check if only a single surface (specifically Front/PDP) was scanned
+    # Under Legal Metrology Rules (Rule 6(2), 6(1)(d) proviso, Rule 8), declarations such as
+    # Manufacturer Address, Month & Year of packing, Consumer Care, and Batch number
+    # may legally reside on the back/side panel or crimp.
+    is_single_front_surface = len(surfaces_processed) <= 1 and any("front" in s.lower() or "pdp" in s.lower() for s in surfaces_processed)
 
     # Determine Commodity Category & Exemption Flags
     prod_type = ""
@@ -168,9 +178,13 @@ def evaluate_legal_metrology_rules(
             mfg_status = "NEEDS REVIEW"
             mfg_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
             mfg_penal = None
+        elif is_single_front_surface:
+            mfg_status = "NEEDS REVIEW"
+            mfg_finding = "Manufacturer/packer address not detected on Front (PDP). May legally appear on back/side panel under Rule 6(2). Provide back panel image."
+            mfg_penal = None
         else:
             mfg_status = "FAIL"
-            mfg_finding = "Manufacturer / packer address omitted from packaging"
+            mfg_finding = "Manufacturer / packer address omitted across all inspected packaging panels"
             mfg_penal = "Section 36(1) read with Rule 10(1)"
     elif mfg.name and mfg_has_pin:
         mfg_status = "PASS"
@@ -271,9 +285,13 @@ def evaluate_legal_metrology_rules(
             mfd_status = "NEEDS REVIEW"
             mfd_finding = "Unable to verify manufacturing date from degraded image. Check crimp or secondary surface."
             mfd_penal = None
+        elif is_single_front_surface:
+            mfd_status = "NEEDS REVIEW"
+            mfd_finding = "Month and year of manufacture not detected on Front (PDP). May appear on crimp, coding area, or back panel under Rule 6(1)(d) proviso. Provide secondary panel image."
+            mfd_penal = None
         else:
             mfd_status = "FAIL"
-            mfd_finding = "Month and year of manufacture/pre-packing omitted from packaging."
+            mfd_finding = "Month and year of manufacture/pre-packing omitted across all inspected packaging panels."
             mfd_penal = "Section 36(1)"
     elif bool(mfd.month and mfd.year) or bool(mfd.raw_text and mfd.raw_text != "Not detected"):
         mfd_status = "PASS"
@@ -357,6 +375,7 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     cc = data.consumer_care
     cc_has_contact = bool(cc.phone or cc.email)
+    cc_penal = None
     if is_micro_exempt:
         cc_status = "NOT APPLICABLE"
         cc_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
@@ -366,9 +385,15 @@ def evaluate_legal_metrology_rules(
     elif is_image_degraded:
         cc_status = "NEEDS REVIEW"
         cc_finding = "Unable to verify consumer care details from degraded image."
-    else:
+        cc_penal = None
+    elif is_single_front_surface:
         cc_status = "NEEDS REVIEW"
-        cc_finding = "Consumer care contact information could not be verified on current panel."
+        cc_finding = "Consumer care contact channels not detected on Front (PDP). Inspect back/secondary panel."
+        cc_penal = None
+    else:
+        cc_status = "FAIL"
+        cc_finding = "Mandatory consumer care helpline / email omitted across all inspected packaging panels."
+        cc_penal = "Section 36(1) read with Rule 6(1)(f)"
 
     checks.append(ComplianceCheckItem(
         rule_no="RULE 6(1)(f)",
@@ -378,7 +403,7 @@ def evaluate_legal_metrology_rules(
         detected_declaration=cc_finding,
         statutory_requirement="Name, address, telephone number and email address of person or office to be contacted for consumer grievances.",
         font_size_or_unit_check="Requisite contact channels verified",
-        section_penalty=None,
+        section_penalty=cc_penal,
         bounding_box=BoundingBox(x=12.0, y=70.0, width=75.0, height=8.0, label="Consumer Care"),
         surface=surface
     ))
@@ -389,12 +414,15 @@ def evaluate_legal_metrology_rules(
     if is_micro_exempt:
         batch_status = "NOT APPLICABLE"
         batch_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
-    elif data.batch:
+    elif data.batch and data.batch != "Not detected":
+        batch_status = "PASS"
+        batch_finding = f"Batch code: {data.batch}"
+    elif data.batch and data.batch != "Not detected":
         batch_status = "PASS"
         batch_finding = f"Batch code: {data.batch}"
     else:
         batch_status = "PASS"
-        batch_finding = "Batch marking verified"
+        batch_finding = "Batch marking verified / coded on packaging"
 
     checks.append(ComplianceCheckItem(
         rule_no="RULE 6(1)(g)",
@@ -438,15 +466,32 @@ def evaluate_legal_metrology_rules(
     # RULE 7: Principal Display Panel area & Table I numeral height
     # ----------------------------------------------------
     h_check = data.table1_numeral_height
+    if is_medical:
+        r7_status = "PASS"
+        r7_finding = "Medical Devices Rules, 2017 apply to numeral/letter height pursuant to proviso to Rule 7(2)"
+        r7_penal = None
+    elif not getattr(h_check, 'is_calibrated', True):
+        r7_status = "NEEDS REVIEW"
+        r7_finding = "Uncalibrated optical measurement — physical font height in mm requires calibrated reference (e.g. standard barcode) or physical gauge inspection."
+        r7_penal = None
+    elif h_check.complies:
+        r7_status = "PASS"
+        r7_finding = f"Detected numeral height {h_check.detected_height_mm} mm complies with Table I minimum {h_check.required_height_mm} mm ({getattr(h_check, 'calibration_basis', '') or 'Calibrated reference'})"
+        r7_penal = None
+    else:
+        r7_status = "FAIL"
+        r7_finding = f"Detected numeral height {h_check.detected_height_mm} mm below Table I statutory minimum {h_check.required_height_mm} mm"
+        r7_penal = "Section 36(1) read with Rule 7 Table I"
+
     checks.append(ComplianceCheckItem(
         rule_no="RULE 7",
         rule_title="Principal Display Panel & Table I minimum font height",
         sub_rule="Rule 7 read with Table I",
-        status="PASS" if h_check.complies else "FAIL",
-        detected_declaration=f"Detected numeral height: {h_check.detected_height_mm} mm (Required: {h_check.required_height_mm} mm)",
+        status=r7_status,
+        detected_declaration=r7_finding,
         statutory_requirement="Minimum numeral and letter height specified in Table I based on PDP area.",
         font_size_or_unit_check="Statutory Table I threshold check",
-        section_penalty="Section 36(1)" if not h_check.complies else None,
+        section_penalty=r7_penal,
         surface=surface
     ))
 
@@ -483,15 +528,37 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     # RULE 10: Manufacturer Name & Complete Address with PIN
     # ----------------------------------------------------
+    if mfg.full_address in ["", "Not detected"]:
+        if is_image_degraded:
+            r10_status = "NEEDS REVIEW"
+            r10_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
+            r10_penal = None
+        elif is_single_front_surface:
+            r10_status = "NEEDS REVIEW"
+            r10_finding = "Manufacturer address and PIN code not detected on Front (PDP). May appear on back/secondary panel under Rule 6(2). Provide back panel image."
+            r10_penal = None
+        else:
+            r10_status = "FAIL"
+            r10_finding = "Manufacturer / packer address omitted across all inspected packaging panels"
+            r10_penal = "Section 36(1) read with Rule 10(1)"
+    elif mfg_has_pin:
+        r10_status = "PASS"
+        r10_finding = f"Address: {mfg.full_address} (Postal PIN: {mfg.pin_code})"
+        r10_penal = None
+    else:
+        r10_status = "FAIL"
+        r10_finding = f"Address: {mfg.full_address} (Violation: 6-digit postal PIN code missing)"
+        r10_penal = "Section 36(1) read with Rule 10(1)"
+
     checks.append(ComplianceCheckItem(
         rule_no="RULE 10",
         rule_title="Declaration of name and address of the manufacturer",
         sub_rule="Rule 10(1)",
-        status="PASS" if mfg_has_pin else "FAIL",
-        detected_declaration=f"Address: {mfg.full_address} (Postal PIN: {mfg.pin_code or 'MISSING'})",
+        status=r10_status,
+        detected_declaration=r10_finding,
         statutory_requirement="Complete postal address with state and 6-digit postal PIN code mandatory.",
         font_size_or_unit_check="6-digit postal PIN requirement",
-        section_penalty="Section 36(1) read with Rule 10(1)" if not mfg_has_pin else None,
+        section_penalty=r10_penal,
         surface=surface
     ))
 

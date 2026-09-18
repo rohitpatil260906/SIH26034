@@ -159,6 +159,8 @@ class Table1HeightCheck(BaseModel):
     detected_height_mm: float = 3.0
     required_height_mm: float = 2.0
     complies: bool = True
+    is_calibrated: bool = True
+    calibration_basis: Optional[str] = "Optical Scale Calibration"
 
 class ProductClassification(BaseModel):
     product_type: str = "Other packaged commodity"
