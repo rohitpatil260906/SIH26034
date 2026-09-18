@@ -11,6 +11,12 @@ import { runOcrOnImage, extractNetQuantity } from '../../services/labelOcrServic
 import { analyzeImageQuality, ImageQualityMetrics } from '../../services/imageQualityService';
 import { enhanceImagePipeline, PreprocessedImageSet } from '../../services/imageEnhancer';
 import {
+  checkImageQualityApi,
+  getPreprocessingVariantsApi,
+  QualityMetricsApiResponse,
+  PreprocessingVariantApiResponse
+} from '../../services/backendApiService';
+import {
   Camera,
   Upload,
   Sparkles,
@@ -58,11 +64,14 @@ export const StepCapture: React.FC = () => {
 
   // Quality assessment state
   const [qualityMetrics, setQualityMetrics] = useState<ImageQualityMetrics | null>(null);
+  const [backendQuality, setBackendQuality] = useState<QualityMetricsApiResponse | null>(null);
   const [isAnalyzingQuality, setIsAnalyzingQuality] = useState<boolean>(false);
 
-  // Preprocessing preview modal state
+  // Preprocessing preview modal state (13 Computer Vision Variants)
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [enhancedSet, setEnhancedSet] = useState<PreprocessedImageSet | null>(null);
+  const [backendVariants, setBackendVariants] = useState<PreprocessingVariantApiResponse[]>([]);
+  const [selectedVariantId, setSelectedVariantId] = useState<string>('original');
   const [isEnhancing, setIsEnhancing] = useState<boolean>(false);
   const [previewTab, setPreviewTab] = useState<'enhanced' | 'thresholded' | 'grayscale' | 'upscaled' | 'original'>('enhanced');
 
@@ -110,10 +119,16 @@ export const StepCapture: React.FC = () => {
   const currentImage = currentInspection?.images[activeSurfaceIndex] || currentInspection?.images[0];
   const svgMockType = 'front-mustard';
 
-  // Analyze image quality whenever the active photo changes
+  // Analyze image quality whenever the active photo changes (12 automated checks)
   useEffect(() => {
     if (currentImage?.url) {
       setIsAnalyzingQuality(true);
+      checkImageQualityApi(currentImage.url)
+        .then((backendRes) => {
+          if (backendRes) setBackendQuality(backendRes);
+        })
+        .catch(() => {});
+
       analyzeImageQuality(currentImage.url)
         .then((metrics) => {
           setQualityMetrics(metrics);
@@ -123,6 +138,7 @@ export const StepCapture: React.FC = () => {
         });
     } else {
       setQualityMetrics(null);
+      setBackendQuality(null);
     }
   }, [currentImage?.url]);
 
@@ -190,6 +206,15 @@ export const StepCapture: React.FC = () => {
     setIsEnhancing(true);
     setIsPreviewModalOpen(true);
     try {
+      getPreprocessingVariantsApi(currentImage.url)
+        .then((vars) => {
+          if (vars && vars.length > 0) {
+            setBackendVariants(vars);
+            setSelectedVariantId(vars[0]?.variant_id || 'original');
+          }
+        })
+        .catch((e) => console.warn('Backend variants error:', e));
+
       const set = await enhanceImagePipeline(currentImage.url);
       setEnhancedSet(set);
     } catch (e) {
@@ -380,8 +405,115 @@ export const StepCapture: React.FC = () => {
                 {isAnalyzingQuality ? (
                   <div className="py-4 text-center text-slate-500 flex items-center justify-center space-x-2">
                     <Loader2 className="w-4 h-4 animate-spin text-[#0f2942]" />
-                    <span>Calculating Laplacian variance and contrast metrics...</span>
+                    <span>Calculating 12 Computer Vision quality and optical metrics...</span>
                   </div>
+                ) : backendQuality ? (
+                  <>
+                    {/* Low Quality Advisory Notice if applicable */}
+                    {backendQuality.advisory && (
+                      <div className="p-2.5 bg-amber-50 border border-amber-300 rounded text-amber-950 space-y-1">
+                        <div className="flex items-center space-x-1.5 font-bold text-amber-900 text-[11px]">
+                          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>{backendQuality.advisory}</span>
+                        </div>
+                        <p className="text-[10px] text-amber-800">
+                          Automated sharpening, glare suppression, and adaptive thresholding will be applied before OCR.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 12 Automated Checks Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">1. Resolution</span>
+                        <span className="font-bold text-slate-800 font-mono text-[10px]">
+                          {backendQuality.width} × {backendQuality.height} ({backendQuality.resolution_megapixels} MP)
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">2. Blur (Laplacian)</span>
+                        <span className={`font-bold font-mono text-[10px] ${backendQuality.is_blurred ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {backendQuality.blur_laplacian_variance.toFixed(1)} ({backendQuality.is_blurred ? 'Blurry' : 'Sharp'})
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">3. Noise Variance</span>
+                        <span className={`font-bold font-mono text-[10px] ${backendQuality.is_noisy ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {backendQuality.noise_variance.toFixed(1)} ({backendQuality.is_noisy ? 'Noisy' : 'Clean'})
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">4. Brightness</span>
+                        <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                          {backendQuality.mean_brightness.toFixed(0)} / 255
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">5. Contrast StdDev</span>
+                        <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                          σ = {backendQuality.contrast_std_dev.toFixed(1)}
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">6. Glare Level</span>
+                        <span className={`font-semibold font-mono text-[10px] ${backendQuality.is_glare_detected ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {backendQuality.glare_percentage.toFixed(1)}% {backendQuality.is_glare_detected ? '(Glare)' : '(Low)'}
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">7. Skew & Rotation</span>
+                        <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                          {backendQuality.skew_angle_deg.toFixed(1)}° skew • {backendQuality.rotation_angle_deg}° rot
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">8. Perspective</span>
+                        <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                          {backendQuality.perspective_distortion_detected ? 'Distorted' : 'Orthogonal'}
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">9. Background Clutter</span>
+                        <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                          Score: {backendQuality.background_interference_score.toFixed(0)}/100
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span className="text-slate-500 block text-[10px] uppercase">10. Text Visibility</span>
+                        <span className="font-semibold text-emerald-800 font-mono text-[10px]">
+                          {backendQuality.text_visibility}
+                        </span>
+                      </div>
+
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded col-span-2 sm:col-span-2">
+                        <span className="text-slate-500 block text-[10px] uppercase">11-12. Overall Quality Rating</span>
+                        <span className="font-bold text-[#0f2942] font-mono text-[11px]">
+                          {backendQuality.overall_quality_score}/100 • Stage 2 Computer Vision Calibrated
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Enhancement Preview Trigger */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleOpenEnhancementPreview}
+                        className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-slate-800 text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Inspect 13 CV Preprocessing Passes (Sharpened / CLAHE / Multiscale)</span>
+                      </button>
+                    </div>
+                  </>
                 ) : qualityMetrics ? (
                   <>
                     {/* Low Quality Advisory Notice if applicable */}
@@ -601,8 +733,54 @@ export const StepCapture: React.FC = () => {
               <div className="py-12 text-center space-y-2">
                 <Loader2 className="w-8 h-8 text-[#0f2942] animate-spin mx-auto" />
                 <p className="text-xs font-semibold text-slate-700">
-                  Applying Laplacian kernels, percentile stretching, and Sauvola adaptive binarization...
+                  Executing 13 Stage 2 Computer Vision Preprocessing Transformations (CLAHE, Deskew, Multiscale)...
                 </p>
+              </div>
+            ) : backendVariants.length > 0 ? (
+              <div className="space-y-3">
+                {/* 13 Stage 2 CV Variants Scrollable Bar */}
+                <div className="flex border-b border-slate-200 text-xs font-semibold space-x-1 overflow-x-auto pb-1">
+                  {backendVariants.map((v) => (
+                    <button
+                      key={v.variant_id}
+                      type="button"
+                      onClick={() => setSelectedVariantId(v.variant_id)}
+                      className={`px-2.5 py-1.5 rounded-t-md whitespace-nowrap cursor-pointer transition text-[11px] font-mono ${
+                        selectedVariantId === v.variant_id
+                          ? 'bg-[#0f2942] text-white font-bold shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Display active backend variant */}
+                {(() => {
+                  const activeVar = backendVariants.find(v => v.variant_id === selectedVariantId) || backendVariants[0];
+                  return (
+                    <>
+                      <div className="bg-slate-900 rounded-lg p-2 flex items-center justify-center max-h-[420px] overflow-hidden shadow-inner">
+                        <img
+                          src={activeVar?.base64_image || currentImage?.url}
+                          alt={activeVar?.name}
+                          className="max-h-[400px] object-contain rounded select-none shadow-md"
+                        />
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-slate-900">{activeVar?.name}: </span>
+                          <span className="text-slate-600">{activeVar?.description}</span>
+                        </div>
+                        <span className="font-mono text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded shrink-0">
+                          {activeVar?.width} × {activeVar?.height} px • {activeVar?.processing_time_ms} ms
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ) : enhancedSet ? (
               <div className="space-y-3">

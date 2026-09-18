@@ -275,6 +275,14 @@ export interface InspectionRecord {
     needsReview: number;
     notApplicable: number;
   };
+  detectedRegions?: any[];
+  measurementValidation?: any;
+  labelmeAnnotation?: any;
+  preprocessingVariants?: any[];
+  externalVerification?: string;
+  scanId?: string;
+  imageQuality?: any;
+  labelmeExportUrl?: string;
   officerNotes: string;
   finalDecision: 'Accepted' | 'Notice Issued' | 'Pending Hearing' | 'Exempt' | 'Draft';
   qrVerificationHash: string;

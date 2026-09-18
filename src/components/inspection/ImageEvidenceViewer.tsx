@@ -10,7 +10,12 @@ import {
   CheckCircle2,
   AlertTriangle,
   HelpCircle,
-  Eye
+  Eye,
+  Download,
+  Ruler,
+  Cpu,
+  FileCode,
+  Tag
 } from 'lucide-react';
 
 interface ImageEvidenceViewerProps {
@@ -18,6 +23,10 @@ interface ImageEvidenceViewerProps {
   evidences: FieldEvidence[];
   selectedField?: string;
   onSelectField?: (fieldName: string) => void;
+  detectedRegions?: any[];
+  measurementValidation?: any;
+  labelmeUrl?: string;
+  scanId?: string;
   className?: string;
 }
 
@@ -26,12 +35,17 @@ export const ImageEvidenceViewer: React.FC<ImageEvidenceViewerProps> = ({
   evidences,
   selectedField,
   onSelectField,
+  detectedRegions = [],
+  measurementValidation,
+  labelmeUrl,
+  scanId,
   className = ''
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [showBoxes, setShowBoxes] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<'boxes' | 'regions'>('boxes');
 
   const activeImage = images[activeImageIndex] || images[0];
 
@@ -43,6 +57,17 @@ export const ImageEvidenceViewer: React.FC<ImageEvidenceViewerProps> = ({
   };
 
   const selectedEvidence = evidences.find((e) => e.field_name === selectedField);
+  const selectedRegion = detectedRegions.find(
+    (r) => r.category === selectedField || r.region_id === selectedField
+  );
+
+  const handleDownloadLabelMe = () => {
+    if (labelmeUrl) {
+      window.open(labelmeUrl, '_blank');
+    } else if (scanId) {
+      window.open(`/api/scan/${encodeURIComponent(scanId)}/labelme`, '_blank');
+    }
+  };
 
   return (
     <div className={`bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`}>
@@ -51,76 +76,129 @@ export const ImageEvidenceViewer: React.FC<ImageEvidenceViewerProps> = ({
         <div className="flex items-center space-x-2">
           <Crosshair className="w-4 h-4 text-emerald-400" />
           <span className="text-xs font-bold text-white uppercase tracking-wider">
-            Image Evidence Overlay Viewer
+            Image Evidence & Region Inspector
           </span>
           {activeImage && (
             <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">
               {activeImage.surface} • {activeImage.name}
             </span>
           )}
+          {scanId && (
+            <span className="text-[10px] bg-indigo-950/80 text-indigo-300 px-2 py-0.5 rounded font-mono border border-indigo-800">
+              Docket: {scanId}
+            </span>
+          )}
         </div>
 
-        {/* Surface Switcher if multiple images exist */}
-        {images.length > 1 && (
-          <div className="flex items-center space-x-1.5">
-            {images.map((img, idx) => (
-              <button
-                key={img.id || idx}
-                type="button"
-                onClick={() => {
-                  setActiveImageIndex(idx);
-                  handleReset();
-                }}
-                className={`text-[11px] px-2.5 py-1 rounded font-medium transition cursor-pointer ${
-                  activeImageIndex === idx
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {img.surface}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Controls & Export */}
+        <div className="flex items-center space-x-2">
+          {/* Surface Switcher if multiple images exist */}
+          {images.length > 1 && (
+            <div className="flex items-center space-x-1.5">
+              {images.map((img, idx) => (
+                <button
+                  key={img.id || idx}
+                  type="button"
+                  onClick={() => {
+                    setActiveImageIndex(idx);
+                    handleReset();
+                  }}
+                  className={`text-[11px] px-2.5 py-1 rounded font-medium transition cursor-pointer ${
+                    activeImageIndex === idx
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {img.surface}
+                </button>
+              ))}
+            </div>
+          )}
 
-        {/* Zoom Controls */}
-        <div className="flex items-center space-x-1">
-          <button
-            type="button"
-            onClick={() => setShowBoxes(!showBoxes)}
-            className={`p-1.5 rounded text-xs transition cursor-pointer ${
-              showBoxes ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-            }`}
-            title="Toggle Bounding Boxes"
-          >
-            <Layers className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleZoomIn}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
-            title="Zoom In"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleZoomOut}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
-            title="Zoom Out"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
-            title="Reset View"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          {/* LabelMe Export Button */}
+          {(labelmeUrl || scanId) && (
+            <button
+              type="button"
+              onClick={handleDownloadLabelMe}
+              className="flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs rounded border border-emerald-500/30 transition cursor-pointer font-medium"
+              title="Download LabelMe v5.2.1 JSON format annotation"
+            >
+              <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+              <span>LabelMe JSON</span>
+            </button>
+          )}
+
+          {/* Zoom & Layer Controls */}
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={() => setShowBoxes(!showBoxes)}
+              className={`p-1.5 rounded text-xs transition cursor-pointer ${
+                showBoxes ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              }`}
+              title="Toggle Bounding Boxes"
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+              title="Reset View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Optical Calibration & Measurement Status Banner */}
+      {measurementValidation && (
+        <div className="px-4 py-1.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[11px]">
+          <div className="flex items-center space-x-2">
+            <Ruler className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-slate-300 font-medium">Optical Calibration:</span>
+            {measurementValidation.reference_detected ? (
+              <span className="text-emerald-400 font-mono">
+                {measurementValidation.reference_type} Detected • Ratio: {measurementValidation.pixel_to_mm_ratio} px/mm • Est. Font: {measurementValidation.estimated_font_height_mm} mm
+              </span>
+            ) : (
+              <span className="text-amber-400/90 font-mono">
+                Measurement unavailable — requires calibrated reference
+              </span>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-400">Table 1 Minimum:</span>
+            <span className="font-mono text-white">{measurementValidation.table1_required_height_mm || 2.0} mm</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                measurementValidation.table1_complies
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                  : 'bg-amber-950 text-amber-300 border border-amber-700'
+              }`}
+            >
+              {measurementValidation.table1_complies ? 'COMPLIES' : 'NEEDS REVIEW'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Viewport */}
       <div className="relative flex-1 min-h-[360px] bg-black/90 flex items-center justify-center overflow-hidden p-4">
@@ -190,38 +268,101 @@ export const ImageEvidenceViewer: React.FC<ImageEvidenceViewerProps> = ({
         )}
       </div>
 
-      {/* Footer Inspector for Selected Field Evidence */}
-      {selectedEvidence && (
-        <div className="p-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 animate-fadeIn">
-          <div className="space-y-0.5">
-            <div className="flex items-center space-x-2">
-              <span className="font-bold text-white">{selectedEvidence.label}</span>
+      {/* Detected Packaging Regions Carousel / Selector */}
+      {detectedRegions.length > 0 && (
+        <div className="px-3 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center space-x-2 overflow-x-auto text-[11px]">
+          <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap flex items-center space-x-1">
+            <Tag className="w-3 h-3 text-indigo-400" />
+            <span>Detected Regions ({detectedRegions.length}):</span>
+          </span>
+          {detectedRegions.map((reg) => {
+            const isSel = selectedField === reg.category || selectedField === reg.region_id;
+            return (
+              <button
+                key={reg.region_id}
+                type="button"
+                onClick={() => onSelectField && onSelectField(reg.category)}
+                className={`px-2 py-0.5 rounded font-mono text-[10px] whitespace-nowrap transition cursor-pointer border ${
+                  isSel
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {reg.category} ({Math.round(reg.detection_confidence * 100)}%)
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer Inspector for Selected Field Evidence / Region */}
+      {(selectedEvidence || selectedRegion) && (
+        <div className="p-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-fadeIn">
+          {/* Left: Crop Thumbnail if available */}
+          {selectedRegion?.cropped_image_base64 && (
+            <div className="flex-shrink-0">
+              <img
+                src={selectedRegion.cropped_image_base64}
+                alt="Region Crop"
+                className="h-14 w-auto max-w-[120px] object-contain rounded border border-slate-700 bg-black/60 shadow-md"
+              />
+            </div>
+          )}
+
+          {/* Middle: Field Particulars & OCR Disagreement Analysis */}
+          <div className="space-y-1 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-white">
+                {selectedEvidence?.label || selectedRegion?.category || selectedField}
+              </span>
               <span
                 className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
-                  selectedEvidence.status === 'DETECTED'
+                  (selectedEvidence?.status || selectedRegion?.status) === 'DETECTED'
                     ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
-                    : selectedEvidence.status === 'NOT DETECTED'
+                    : (selectedEvidence?.status || selectedRegion?.status) === 'NOT DETECTED'
                     ? 'bg-red-950 text-red-300 border border-red-700'
                     : 'bg-amber-950 text-amber-300 border border-amber-700'
                 }`}
               >
-                {selectedEvidence.status}
+                {selectedEvidence?.status || selectedRegion?.status || 'DETECTED'}
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                {Math.round(selectedEvidence.confidence * 100)}% Confidence
+                {Math.round((selectedEvidence?.confidence || selectedRegion?.ocr_confidence || 0.95) * 100)}% Confidence
               </span>
+              {selectedRegion?.method_used && (
+                <span className="text-[10px] text-indigo-300 bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-800">
+                  Engine: {selectedRegion.method_used}
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-400 font-mono select-all">
-              Value: <span className="text-emerald-300 font-semibold">{selectedEvidence.value}</span>
-              {selectedEvidence.source_text && (
+
+            <p className="text-[11px] text-slate-300 font-mono select-all truncate">
+              Value: <span className="text-emerald-300 font-semibold">{selectedEvidence?.value || selectedRegion?.selected_text || 'Detected'}</span>
+              {selectedEvidence?.source_text && (
                 <span className="ml-2 text-slate-500">| Source: "{selectedEvidence.source_text}"</span>
               )}
             </p>
+
+            {/* Multi-Engine OCR Candidates Comparison if available */}
+            {selectedRegion?.ocr_candidates && Object.keys(selectedRegion.ocr_candidates).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-slate-500 font-medium">OCR Consensus:</span>
+                {Object.entries(selectedRegion.ocr_candidates).map(([engine, txt]) => (
+                  <span
+                    key={engine}
+                    className="text-[10px] bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded font-mono text-slate-300"
+                  >
+                    <span className="text-slate-500 uppercase">{engine}:</span> "{String(txt)}"
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          {selectedEvidence.rule_reference && (
-            <div className="text-[10px] font-mono bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-400">
-              Statutory Ref: <span className="text-white">{selectedEvidence.rule_reference}</span>
+          {/* Right: Statutory Reference */}
+          {selectedEvidence?.rule_reference && (
+            <div className="text-[10px] font-mono bg-slate-900 border border-slate-800 px-2.5 py-1.5 rounded text-slate-400 flex-shrink-0">
+              Statutory Ref: <span className="text-white font-semibold">{selectedEvidence.rule_reference}</span>
             </div>
           )}
         </div>

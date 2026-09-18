@@ -640,6 +640,10 @@ export const StepDeclarations: React.FC = () => {
               evidences={Object.values(evidenceMap)}
               selectedField={selectedFieldKey || undefined}
               onSelectField={(k) => setSelectedFieldKey(k || null)}
+              detectedRegions={currentInspection.detectedRegions}
+              measurementValidation={currentInspection.measurementValidation}
+              labelmeUrl={currentInspection.labelmeExportUrl || (currentInspection.scanId ? `/api/scan/${encodeURIComponent(currentInspection.scanId)}/labelme` : undefined)}
+              scanId={currentInspection.scanId}
             />
           )}
 

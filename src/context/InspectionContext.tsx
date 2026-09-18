@@ -20,6 +20,7 @@ import {
 } from '../services/labelOcrService';
 import { analyzeLabelWithGemini, getGeminiApiKey } from '../services/geminiVisionService';
 import { evaluateLegalMetrologyRules } from '../services/ruleEngineService';
+import { processScanApi, getLabelMeJsonUrl } from '../services/backendApiService';
 
 interface InspectionContextType {
   inspections: InspectionRecord[];
@@ -389,9 +390,179 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setAnalysisStage('Executing Tesseract Optical Character Recognition (OCR)...');
 
       try {
-        // Check for Gemini Vision AI key for 100% precision extraction
+        // -----------------------------------------------------------------
+        // STAGE 2 & STAGE 3: LM-COMPASS Backend Pipeline (CV + OCR + Rules)
+        // -----------------------------------------------------------------
+        setAnalysisProgress(30);
+        setAnalysisStage('Executing LM-COMPASS Stage 2 Computer Vision & Quality Analysis (12 Metrics)...');
+
+        const imagesPayload = realImages.map(img => ({
+          data: img.url,
+          surface: img.surface,
+          file_name: img.name
+        }));
+
+        try {
+          const backendResponse = await processScanApi(imagesPayload);
+
+          if (backendResponse && backendResponse.compliance_checks && backendResponse.compliance_checks.length > 0) {
+            setAnalysisProgress(75);
+            setAnalysisStage('Processing Stage 3 Multi-Engine OCR & Legal Metrology Rule Engine...');
+
+            const ts = Date.now();
+            const decs: ExtractedDeclaration[] = [];
+            const vios: InspectionViolation[] = [];
+
+            backendResponse.canonical_fields.forEach((field, idx) => {
+              decs.push({
+                id: `DEC-BK-${field.field_name}-${ts}-${idx}`,
+                declarationType: field.statutory_name || field.field_name,
+                extractedValue: field.extracted_value || 'Not detected',
+                expectedRequirement: `Statutory declaration under ${field.rule_reference}`,
+                ruleReference: field.rule_reference,
+                surface: (field.detected_on_surface || primaryImg.surface) as SurfaceType,
+                status: field.status === 'DETECTED' ? 'Found' : (field.status === 'NOT DETECTED' ? 'Missing' : 'Under Review'),
+                confidence: field.confidence > 0.85 ? 'High' : (field.confidence > 0.6 ? 'Medium' : 'Low'),
+                confidenceScore: field.confidence,
+                officerStatus: field.status === 'DETECTED' ? 'Verified' : 'Pending',
+                correctionNotes: field.is_uncertain ? 'Low confidence / ambiguous declaration requiring physical review.' : undefined,
+                boundingBox: field.bbox ? { ...field.bbox, label: field.statutory_name } : { x: 15, y: 15 + idx * 10, width: 70, height: 8, label: field.statutory_name }
+              });
+            });
+
+            backendResponse.compliance_checks.forEach((chk, idx) => {
+              if (chk.status === 'FAIL') {
+                vios.push({
+                  id: `VIO-BK-${chk.rule_no.replace(/[^a-zA-Z0-9]/g, '_')}-${ts}-${idx}`,
+                  violationType: chk.rule_title,
+                  ruleReference: `${chk.rule_no} (${chk.sub_rule})`,
+                  statutoryActClause: chk.section_penalty || `${chk.rule_no} read with Section 36(1)`,
+                  product: backendResponse.product_info?.product_name || 'Packaged Commodity',
+                  surface: (chk.surface || primaryImg.surface) as SurfaceType,
+                  description: chk.detected_declaration,
+                  severity: (chk.rule_no.includes('6(1)(e)') || chk.rule_no.includes('6(1)(c)') || chk.rule_no.includes('18')) ? 'High' : 'Medium',
+                  officerStatus: 'Needs Review',
+                  evidenceImage: primaryImg.url,
+                  evidenceBoundingBox: chk.bounding_box ? { ...chk.bounding_box, label: chk.rule_title } : { x: 15, y: 25, width: 70, height: 10, label: chk.rule_title },
+                  recommendedPenalty: chk.section_penalty || 'Notice under Section 36(1). Compounding fee: ₹25,000.',
+                  reportedDate: new Date().toISOString().slice(0, 10)
+                });
+              }
+            });
+
+            const pInfo = backendResponse.product_info || {};
+            const mfgInfo = pInfo.manufacturer || {};
+
+            const structData: StructuredProductData = {
+              product_name: pInfo.product_name || 'Packaged Commodity',
+              commodity_name: pInfo.commodity_name || 'Packaged Commodity',
+              manufacturer: {
+                name: mfgInfo.name || 'Manufacturer',
+                address: mfgInfo.full_address || mfgInfo.address || 'Address',
+                pin_code: mfgInfo.pin_code
+              },
+              net_quantity: pInfo.net_quantity?.raw_text || (pInfo.net_quantity?.value ? `${pInfo.net_quantity.value} ${pInfo.net_quantity.unit}` : '50 g'),
+              mrp: pInfo.mrp?.raw_text || (pInfo.mrp?.amount ? `₹ ${pInfo.mrp.amount}` : '₹ 0.00'),
+              unit_sale_price: pInfo.unit_sale_price || '',
+              manufacturing_date: pInfo.dates?.mfd || '',
+              packing_date: '',
+              import_date: '',
+              expiry_or_best_before: pInfo.dates?.expiry || '',
+              batch_number: pInfo.batch_number || '',
+              packer: { name: '', address: '' },
+              importer: { name: '', address: '' },
+              consumer_care: {
+                phone: pInfo.consumer_care?.phone || '',
+                email: pInfo.consumer_care?.email || '',
+                address: mfgInfo.full_address || ''
+              },
+              country_of_origin: pInfo.country_of_origin || 'India',
+              other_declarations: []
+            };
+
+            const rawLines = backendResponse.extracted_lines.map(l => l.text);
+            ocrCombinedText = rawLines.join('\n');
+            meanConfidence = Math.round(
+              backendResponse.extracted_lines.reduce((acc, l) => acc + (l.confidence || 0.95), 0) /
+              Math.max(backendResponse.extracted_lines.length, 1) * 100
+            );
+
+            parsedResult = {
+              isLakmeMatch: (pInfo.product_name || '').toLowerCase().includes('lakm'),
+              detectedBrand: pInfo.product_name?.split(' ')[0] || 'Brand',
+              detectedProductName: pInfo.product_name || 'Packaged Commodity',
+              detectedCategory: pInfo.commodity_name || 'Packaged Commodity',
+              detectedManufacturer: mfgInfo.full_address || mfgInfo.name || '',
+              detectedBarcode: '',
+              detectedBatch: pInfo.batch_number || '',
+              declarations: decs,
+              violations: vios,
+              extractedLines: backendResponse.extracted_lines.map(l => ({
+                lineNumber: l.line_index,
+                text: l.text,
+                confidence: Math.round((l.confidence || 0.95) * 100),
+                status: l.is_uncertain ? 'Under Review' : 'Compliant',
+                matchedRule: 'Stage 3 Multi-Engine OCR',
+                category: 'Extracted Label Declaration'
+              })),
+              structuredData: structData,
+              canonicalFields: backendResponse.canonical_fields.map(cf => ({
+                field: cf.field_name,
+                label: cf.statutory_name || cf.field_name,
+                value: cf.extracted_value,
+                confidence: cf.confidence,
+                source: cf.extracted_value,
+                status: cf.status === 'DETECTED' ? 'Detected' : (cf.status === 'NOT DETECTED' ? 'Not Detected' : 'Unreadable'),
+                bbox: cf.bbox,
+                surface: (cf.detected_on_surface || primaryImg.surface) as SurfaceType
+              })),
+              complianceChecks: backendResponse.compliance_checks.map(chk => ({
+                ruleId: chk.rule_no,
+                ruleNo: chk.rule_no,
+                subRule: chk.sub_rule,
+                requirement: chk.statutory_requirement,
+                detectedInfo: chk.detected_declaration,
+                confidence: 0.96,
+                status: chk.status as any,
+                isApplicable: chk.is_applicable,
+                applicabilityReason: chk.font_size_or_unit_check,
+                evidenceSource: chk.detected_declaration,
+                evidenceBbox: chk.bounding_box,
+                evidenceSurface: chk.surface as SurfaceType,
+                penalRef: chk.section_penalty || undefined
+              })),
+              complianceScore: backendResponse.compliance_score,
+              ocrResult: {
+                rawText: ocrCombinedText,
+                lines: rawLines,
+                words: [],
+                confidence: meanConfidence,
+                imageWidth: 1000,
+                imageHeight: 1000
+              },
+              ruleEvaluationSummary: {
+                totalRulesEvaluated: backendResponse.compliance_checks.length,
+                passedRulesCount: backendResponse.compliance_checks.filter(c => c.status === 'PASS').length,
+                failedRulesCount: backendResponse.compliance_checks.filter(c => c.status === 'FAIL').length,
+                exemptRulesCount: backendResponse.compliance_checks.filter(c => c.status === 'NOT APPLICABLE').length
+              },
+              scanId: backendResponse.scan_id,
+              detectedRegions: backendResponse.detected_regions,
+              measurementValidation: backendResponse.measurement_validation,
+              labelmeAnnotation: backendResponse.labelme_annotation,
+              preprocessingVariants: backendResponse.preprocessing_variants,
+              externalVerification: backendResponse.external_verification,
+              imageQuality: backendResponse.image_quality,
+              labelmeExportUrl: getLabelMeJsonUrl(backendResponse.scan_id)
+            } as any;
+          }
+        } catch (bkErr) {
+          console.warn('Backend API note, falling back to Gemini/client OCR:', bkErr);
+        }
+
+        // Check for Gemini Vision AI key for 100% precision extraction (fallback if backend not available)
         const geminiKey = getGeminiApiKey();
-        if (geminiKey) {
+        if (!parsedResult && geminiKey) {
           try {
             setAnalysisProgress(35);
             setAnalysisStage('Executing Gemini Vision AI for Complete Label OCR & Entity Extraction...');
@@ -923,6 +1094,14 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           needsReview: 0,
           notApplicable: finalResult.ruleEvaluationSummary.exemptRulesCount
         },
+        scanId: (finalResult as any).scanId || prev.scanId,
+        detectedRegions: (finalResult as any).detectedRegions || prev.detectedRegions,
+        measurementValidation: (finalResult as any).measurementValidation || prev.measurementValidation,
+        labelmeAnnotation: (finalResult as any).labelmeAnnotation || prev.labelmeAnnotation,
+        preprocessingVariants: (finalResult as any).preprocessingVariants || prev.preprocessingVariants,
+        externalVerification: (finalResult as any).externalVerification || prev.externalVerification,
+        imageQuality: (finalResult as any).imageQuality || prev.imageQuality,
+        labelmeExportUrl: (finalResult as any).labelmeExportUrl || prev.labelmeExportUrl,
         images: prev.images.map(img => ({ ...img, ocrExtracted: true }))
       };
     });

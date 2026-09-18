@@ -12,12 +12,30 @@ import {
   QrCode,
   CheckCircle2,
   AlertOctagon,
-  Scale
+  Scale,
+  FileText,
+  FileCode
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getPdfReportUrl, getDocxReportUrl, getLabelMeJsonUrl } from '../../services/backendApiService';
 
 export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({ inspection }) => {
   const navigate = useNavigate();
+
+  const handleDownloadPDF = () => {
+    const docketId = inspection.scanId || inspection.id;
+    window.open(getPdfReportUrl(docketId), '_blank');
+  };
+
+  const handleDownloadDOCX = () => {
+    const docketId = inspection.scanId || inspection.id;
+    window.open(getDocxReportUrl(docketId), '_blank');
+  };
+
+  const handleDownloadLabelMe = () => {
+    const docketId = inspection.scanId || inspection.id;
+    window.open(getLabelMeJsonUrl(docketId), '_blank');
+  };
 
   const handlePrint = () => {
     window.print();
@@ -67,30 +85,38 @@ export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({
           </span>
         </div>
 
-        <div className="flex items-center space-x-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="secondary"
             size="sm"
-            leftIcon={<FileSpreadsheet className="w-4 h-4" />}
-            onClick={handleExportCSV}
+            leftIcon={<FileCode className="w-4 h-4 text-emerald-600" />}
+            onClick={handleDownloadLabelMe}
           >
-            Export CSV
+            LabelMe JSON
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            leftIcon={<Download className="w-4 h-4" />}
-            onClick={handleExportJSON}
+            leftIcon={<FileText className="w-4 h-4 text-blue-600" />}
+            onClick={handleDownloadDOCX}
           >
-            Export JSON
+            Download Word (DOCX)
           </Button>
           <Button
             variant="primary"
             size="sm"
+            leftIcon={<Download className="w-4 h-4 text-white" />}
+            onClick={handleDownloadPDF}
+          >
+            ReportLab PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             leftIcon={<Printer className="w-4 h-4" />}
             onClick={handlePrint}
           >
-            Print Official Report (PDF)
+            Print
           </Button>
         </div>
       </div>

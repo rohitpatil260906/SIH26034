@@ -1,22 +1,92 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+# ----------------------------------------------------
+# STAGE 2: COMPUTER VISION BRANCH MODELS
+# ----------------------------------------------------
+
 class BoundingBox(BaseModel):
-    x: float = 0.0
-    y: float = 0.0
+    x: float = 0.0  # percentage 0-100 or pixel coordinate
+    y: float = 0.0  # percentage 0-100 or pixel coordinate
     width: float = 0.0
     height: float = 0.0
+    label: Optional[str] = None
+    pixel_coords: Optional[List[int]] = None  # [x1, y1, x2, y2]
+
+class LabelMeShape(BaseModel):
+    label: str
+    points: List[List[float]]  # [[x1, y1], [x2, y2]]
+    group_id: Optional[int] = None
+    description: Optional[str] = None
+    shape_type: str = "rectangle"
+    flags: Dict[str, Any] = Field(default_factory=dict)
+    detection_confidence: float = 0.95
+    ocr_confidence: float = 0.95
+
+class LabelMeAnnotation(BaseModel):
+    version: str = "5.2.1"
+    flags: Dict[str, Any] = Field(default_factory=dict)
+    shapes: List[LabelMeShape] = Field(default_factory=list)
+    imagePath: str = ""
+    imageData: Optional[str] = None
+    imageHeight: int = 1000
+    imageWidth: int = 1000
 
 class ImageQualityMetrics(BaseModel):
-    resolution_megapixels: float
-    blur_laplacian_variance: float
-    is_blurred: bool
-    mean_brightness: float
-    contrast_std_dev: float
-    text_visibility: str
-    overall_quality_score: int
+    """12 statutory & optical image quality assessment metrics."""
+    resolution_megapixels: float = 0.0
+    width: int = 0
+    height: int = 0
+    blur_laplacian_variance: float = 0.0
+    is_blurred: bool = False
+    noise_variance: float = 0.0
+    is_noisy: bool = False
+    mean_brightness: float = 0.0
+    contrast_std_dev: float = 0.0
+    glare_percentage: float = 0.0
+    is_glare_detected: bool = False
+    rotation_angle_deg: float = 0.0
+    perspective_distortion_detected: bool = False
+    skew_angle_deg: float = 0.0
+    background_interference_score: float = 0.0
+    text_visibility: str = "Optimal"
+    overall_quality_score: int = 85
     advisory: Optional[str] = None
+
+class PreprocessingVariantInfo(BaseModel):
+    variant_id: str
+    name: str
+    description: str
+    base64_image: Optional[str] = None
+    width: int = 0
+    height: int = 0
+    processing_time_ms: float = 0.0
+
+class DetectedRegion(BaseModel):
+    region_id: str
+    category: str  # MRP, Net quantity, Mfg date, Expiry, Manufacturer, Packer, Importer, etc.
+    bbox: BoundingBox
+    detection_confidence: float = 0.95
+    ocr_confidence: float = 0.95
+    cropped_image_base64: Optional[str] = None
+    ocr_candidates: Dict[str, str] = Field(default_factory=dict)  # engine -> extracted text
+    selected_text: str = ""
+    method_used: str = ""
+    status: str = "VERIFIED"  # 'VERIFIED', 'NEEDS REVIEW', 'UNCERTAIN'
+
+class MeasurementValidation(BaseModel):
+    reference_detected: bool = False
+    reference_type: Optional[str] = None
+    pixel_to_mm_ratio: Optional[float] = None
+    estimated_font_height_mm: Optional[float] = None
+    table1_required_height_mm: float = 2.0
+    table1_complies: bool = True
+    status_message: str = "Measurement unavailable — requires calibrated reference"
+
+# ----------------------------------------------------
+# STAGE 3: OCR + NLP + RULES ENGINE MODELS
+# ----------------------------------------------------
 
 class ExtractedLine(BaseModel):
     line_index: int
@@ -25,6 +95,8 @@ class ExtractedLine(BaseModel):
     bbox: Optional[BoundingBox] = None
     is_uncertain: bool = False
     surface: str = "Front (PDP)"
+    matched_rule: Optional[str] = None
+    classification: Optional[str] = None
 
 class CanonicalField(BaseModel):
     field_name: str
@@ -61,6 +133,7 @@ class MrpInfo(BaseModel):
     amount: float = 0.0
     tax_inclusive_statement_present: bool = True
     complies_tax_phrase: bool = True
+    is_uncertain: bool = False
 
 class UnitSalePriceInfo(BaseModel):
     raw_text: Optional[str] = None
@@ -102,11 +175,18 @@ class FieldEvidence(BaseModel):
     field_name: str
     label: str
     value: str
-    confidence: float = 0.98
+    ocr_confidence: float = 0.95
+    detection_confidence: float = 0.95
+    validation_confidence: float = 0.95
+    overall_confidence: float = 0.95
     source_text: str = ""
     image_id: Optional[str] = None
     surface: str = "Front (PDP)"
     bounding_box: Optional[BoundingBox] = None
+    cropped_image_base64: Optional[str] = None
+    processing_method: str = "Multi-Engine OCR Ensemble"
+    ocr_candidates: Dict[str, str] = Field(default_factory=dict)
+    disagreement_detected: bool = False
     status: str = "DETECTED"  # 'DETECTED', 'NOT DETECTED', 'UNREADABLE', 'NEEDS REVIEW', 'NOT APPLICABLE'
     rule_reference: Optional[str] = None
     review_reason: Optional[str] = None
@@ -139,7 +219,7 @@ class ComplianceCheckItem(BaseModel):
     rule_no: str
     rule_title: str
     sub_rule: str
-    status: str  # 'PASS', 'FAIL', 'NEEDS REVIEW', 'NOT APPLICABLE', 'UNREADABLE'
+    status: str  # 'PASS', 'FAIL', 'WARN', 'NEEDS REVIEW', 'NOT APPLICABLE', 'NOT DETECTED'
     detected_declaration: str
     statutory_requirement: str
     font_size_or_unit_check: str
@@ -148,6 +228,11 @@ class ComplianceCheckItem(BaseModel):
     surface: str = "Front (PDP)"
     is_applicable: bool = True
     applicability_reason: Optional[str] = None
+    evidence_crop_base64: Optional[str] = None
+
+# ----------------------------------------------------
+# STAGE 4: PIPELINE REQUEST / RESPONSE & BENCHMARK MODELS
+# ----------------------------------------------------
 
 class ScanProcessRequest(BaseModel):
     images: List[Dict[str, Any]]  # [{"data": base64_str, "surface": "Front (PDP)", "file_name": "front.jpg"}]
@@ -163,4 +248,46 @@ class ScanProcessResponse(BaseModel):
     extracted_lines: List[ExtractedLine]
     surfaces_processed: List[str]
     image_quality: Optional[ImageQualityMetrics] = None
+    preprocessing_variants: List[PreprocessingVariantInfo] = Field(default_factory=list)
+    detected_regions: List[DetectedRegion] = Field(default_factory=list)
+    measurement_validation: Optional[MeasurementValidation] = None
+    labelme_annotation: Optional[LabelMeAnnotation] = None
+    external_verification: str = "External verification: Not available"
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class BenchmarkEvaluationMetric(BaseModel):
+    metric_name: str
+    category: str
+    measured_accuracy: float
+    target_threshold: float
+    status: str
+    sample_count: int
+    notes: str
+
+class BenchmarkEvaluationResponse(BaseModel):
+    benchmark_id: str
+    timestamp: str
+    total_test_samples: int
+    test_categories: List[str]
+    metrics: List[BenchmarkEvaluationMetric]
+    overall_system_reliability: float
+    false_positive_rate: float
+    false_negative_rate: float
+    disagreement_resolution_rate: float
+
+class SystemDiagnosticStatus(BaseModel):
+    status: str = "ONLINE"
+    version: str = "2.4.0"
+    yolo_model_loaded: bool = False
+    yolo_backend: str = "CPU / PyTorch"
+    tesseract_available: bool = False
+    easyocr_available: bool = False
+    paddleocr_available: bool = False
+    opencv_version: str = ""
+    database_backend: str = "SQLite / PostgreSQL"
+    database_connected: bool = True
+    redis_cache_backend: str = "In-Memory / Redis"
+    redis_connected: bool = False
+    elasticsearch_backend: str = "In-Memory / Elasticsearch"
+    elasticsearch_connected: bool = False
+    external_government_api: str = "External verification: Not available"
