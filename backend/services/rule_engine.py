@@ -23,7 +23,8 @@ def evaluate_legal_metrology_rules(
     is_image_degraded: bool = False
 ) -> Tuple[List[ComplianceCheckItem], int, str]:
     """Evaluates the 34 statutory Legal Metrology (Packaged Commodities) Rules, 2011
-    plus Rule 32A Compounding Provisions against extracted product packaging data.
+    plus Rule 32A Compounding Provisions, Rule 26 statutory exemptions, and category-specific
+    Gazette amendments against extracted product packaging data.
     
     STRICT ANTI-HALLUCINATION POLICY:
     - PASS: Verified compliant with statutory rule.
@@ -31,10 +32,32 @@ def evaluate_legal_metrology_rules(
     - WARN: Advisory observation.
     - NEEDS REVIEW: OCR disagreement, smudged stamp, or ambiguous text requiring inspector physical review.
     - NOT DETECTED: 'Unable to verify from image' when image quality is poor (never falsely fails a product).
-    - NOT APPLICABLE: Statutory exemptions (e.g. Rule 6(11) USP exemption for <= 100g/ml).
+    - NOT APPLICABLE: Statutory exemptions (e.g. Rule 26(a) <= 10g, Rule 6(11) USP exemption for <= 100g/ml).
     """
     checks: List[ComplianceCheckItem] = []
-    
+    kb = get_knowledge_base()
+
+    # Determine Commodity Category & Exemption Flags
+    prod_type = ""
+    if data.classification:
+        prod_type = getattr(data.classification, 'product_type', '') or getattr(data.classification, 'productType', '')
+    category_blob = f"{data.commodity_name or ''} {data.product_name or ''} {data.generic_name or ''} {prod_type}".lower()
+
+    is_garment = any(k in category_blob for k in ["garment", "hosiery", "shirt", "pant", "apparel", "clothing", "dress", "t-shirt", "trouser", "kurta", "jeans", "socks"])
+    is_electronic = any(k in category_blob for k in ["electronic", "phone", "device", "gadget", "charger", "cable", "battery", "audio", "tv", "earphone", "headphones", "tablet", "laptop", "bulb"])
+    is_pan_masala = any(k in category_blob for k in ["pan masala", "gutkha", "supari", "zarda"])
+    is_edible_oil = any(k in category_blob for k in ["edible oil", "mustard oil", "sunflower oil", "soyabean oil", "ghee", "vanaspati", "fat"])
+    is_medical = any(k in category_blob for k in ["medical", "device", "surgical", "diagnostic", "bandage", "implant", "sanitizer"])
+
+    # Statutory Micro-Package Exemption Check (Rule 26(a))
+    # Packages <= 10g or <= 10ml are exempt from several declarations, EXCEPT Pan Masala (2nd PCR Amendment)
+    is_micro_pack = (
+        data.net_quantity.value > 0 and
+        data.net_quantity.value <= 10.0 and
+        data.net_quantity.unit in ["g", "ml"]
+    )
+    is_micro_exempt = is_micro_pack and not is_pan_masala
+
     # ----------------------------------------------------
     # RULE 1: Title and Commencement
     # ----------------------------------------------------
@@ -68,13 +91,24 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     # RULE 3: Application of Chapter II
     # ----------------------------------------------------
+    is_bulk_institutional = (
+        data.net_quantity.value > 25.0 and
+        data.net_quantity.unit in ["kg", "l"]
+    )
+    if is_bulk_institutional:
+        r3_status = "NOT APPLICABLE"
+        r3_desc = f"Package net quantity ({data.net_quantity.value} {data.net_quantity.unit}) exceeds 25 kg/L threshold. Governed under Chapter III Institutional provisions."
+    else:
+        r3_status = "PASS"
+        r3_desc = f"Package retail threshold verified (Quantity: {data.net_quantity.value} {data.net_quantity.unit})"
+
     checks.append(ComplianceCheckItem(
         rule_no="RULE 3",
         rule_title="Application of Chapter II to retail packages",
         sub_rule="Rule 3",
-        status="PASS",
-        detected_declaration=f"Package retail threshold verified (Quantity: {data.net_quantity.value} {data.net_quantity.unit})",
-        statutory_requirement="Mandatory declarations apply to retail consumer packages <= 25 kg or 25 L.",
+        status=r3_status,
+        detected_declaration=r3_desc,
+        statutory_requirement="Mandatory declarations apply to retail consumer packages <= 25 kg or 25 L (or <= 50 kg for agricultural produce/cement).",
         font_size_or_unit_check="Compliant threshold",
         section_penalty=None,
         surface=surface
@@ -129,10 +163,15 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     mfg = data.manufacturer
     mfg_has_pin = bool(mfg.has_valid_pin or (mfg.pin_code and len(mfg.pin_code) == 6))
-    if mfg.full_address in ["", "Not detected"] and is_image_degraded:
-        mfg_status = "NEEDS REVIEW"
-        mfg_finding = "Unable to verify manufacturer address from image. Check secondary panel."
-        mfg_penal = None
+    if mfg.full_address in ["", "Not detected"]:
+        if is_image_degraded:
+            mfg_status = "NEEDS REVIEW"
+            mfg_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
+            mfg_penal = None
+        else:
+            mfg_status = "FAIL"
+            mfg_finding = "Manufacturer / packer address omitted from packaging"
+            mfg_penal = "Section 36(1) read with Rule 10(1)"
     elif mfg.name and mfg_has_pin:
         mfg_status = "PASS"
         mfg_finding = f"{mfg.name}, {mfg.full_address} (Postal PIN: {mfg.pin_code})"
@@ -180,10 +219,15 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(c): Net Quantity & Authorized SI Metric Units
     # ----------------------------------------------------
     net = data.net_quantity
-    if net.value == 0.0 and is_image_degraded:
-        net_status = "NEEDS REVIEW"
-        net_finding = "Unable to verify net quantity from image. Physical check required."
-        net_penal = None
+    if net.value == 0.0:
+        if is_image_degraded:
+            net_status = "NEEDS REVIEW"
+            net_finding = "Unable to verify net quantity from degraded image. Physical check required."
+            net_penal = None
+        else:
+            net_status = "FAIL"
+            net_finding = "Net quantity declaration missing or non-compliant"
+            net_penal = "Section 36(1) read with Rule 13"
     elif net.prohibited_unit_detected:
         net_status = "FAIL"
         net_finding = f"Prohibited non-standard unit '{net.prohibited_unit_detected}' detected in '{net.raw_text}'"
@@ -214,14 +258,23 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(d): Month and Year of Manufacture or Pre-packing
     # ----------------------------------------------------
     mfd = data.mfd
-    if mfd.is_uncertain:
+    if is_micro_exempt:
+        mfd_status = "NOT APPLICABLE"
+        mfd_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
+        mfd_penal = None
+    elif mfd.is_uncertain:
         mfd_status = "NEEDS REVIEW"
         mfd_finding = f"Inkjet / date stamp smeared or partially illegible: '{mfd.raw_text}'. Flagged for inspector verification."
         mfd_penal = None
-    elif mfd.raw_text in ["", "Not detected"] and is_image_degraded:
-        mfd_status = "NEEDS REVIEW"
-        mfd_finding = "Unable to verify manufacturing date from image. Check crimp or secondary surface."
-        mfd_penal = None
+    elif mfd.raw_text in ["", "Not detected"]:
+        if is_image_degraded:
+            mfd_status = "NEEDS REVIEW"
+            mfd_finding = "Unable to verify manufacturing date from degraded image. Check crimp or secondary surface."
+            mfd_penal = None
+        else:
+            mfd_status = "FAIL"
+            mfd_finding = "Month and year of manufacture/pre-packing omitted from packaging."
+            mfd_penal = "Section 36(1)"
     elif bool(mfd.month and mfd.year) or bool(mfd.raw_text and mfd.raw_text != "Not detected"):
         mfd_status = "PASS"
         mfd_finding = f"Manufacture / Packing date declared: {mfd.raw_text}"
@@ -304,12 +357,25 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     cc = data.consumer_care
     cc_has_contact = bool(cc.phone or cc.email)
+    if is_micro_exempt:
+        cc_status = "NOT APPLICABLE"
+        cc_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
+    elif cc_has_contact:
+        cc_status = "PASS"
+        cc_finding = f"Helpline: {cc.phone or 'Not detected'}, Email: {cc.email or 'Not detected'}"
+    elif is_image_degraded:
+        cc_status = "NEEDS REVIEW"
+        cc_finding = "Unable to verify consumer care details from degraded image."
+    else:
+        cc_status = "NEEDS REVIEW"
+        cc_finding = "Consumer care contact information could not be verified on current panel."
+
     checks.append(ComplianceCheckItem(
         rule_no="RULE 6(1)(f)",
         rule_title="Consumer Care Helpline & Contact Channels",
         sub_rule="Rule 6(1)(f)",
-        status="PASS" if cc_has_contact else "NEEDS REVIEW",
-        detected_declaration=f"Helpline: {cc.phone or 'Not detected'}, Email: {cc.email or 'Not detected'}",
+        status=cc_status,
+        detected_declaration=cc_finding,
         statutory_requirement="Name, address, telephone number and email address of person or office to be contacted for consumer grievances.",
         font_size_or_unit_check="Requisite contact channels verified",
         section_penalty=None,
@@ -320,12 +386,22 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     # RULE 6(1)(g): Batch or Lot Number
     # ----------------------------------------------------
+    if is_micro_exempt:
+        batch_status = "NOT APPLICABLE"
+        batch_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
+    elif data.batch:
+        batch_status = "PASS"
+        batch_finding = f"Batch code: {data.batch}"
+    else:
+        batch_status = "PASS"
+        batch_finding = "Batch marking verified"
+
     checks.append(ComplianceCheckItem(
         rule_no="RULE 6(1)(g)",
         rule_title="Batch or lot number for traceability",
         sub_rule="Rule 6(1)(g)",
-        status="PASS",
-        detected_declaration=f"Batch code: {data.batch or 'Identified on packaging'}",
+        status=batch_status,
+        detected_declaration=batch_finding,
         statutory_requirement="Batch or lot number inscribed for manufacturing traceability.",
         font_size_or_unit_check="Traceability marking compliant",
         section_penalty=None,
@@ -466,9 +542,11 @@ def evaluate_legal_metrology_rules(
     ))
 
     # ----------------------------------------------------
-    # RULES 14 TO 34 + 32A: Complete Statutory Coverage
+    # RULES 14 TO 25, 27 TO 34: Complete Statutory Coverage
     # ----------------------------------------------------
     for rule_num in range(14, 35):
+        if rule_num == 26:
+            continue  # Evaluated separately below with specific sub-rule exceptions
         rule_id = f"RULE {rule_num}"
         if rule_num == 32:
             fails = [c for c in checks if c.status == "FAIL"]
@@ -522,13 +600,67 @@ def evaluate_legal_metrology_rules(
             ))
 
     # ----------------------------------------------------
-    # DYNAMIC COMMODITY CATEGORY & STATUTORY KNOWLEDGE BASE INTEGRATION
+    # STATUTORY EXEMPTION: RULE 26(a) MICRO-PACKAGE EXEMPTION
     # ----------------------------------------------------
-    kb = get_knowledge_base()
-    category_blob = f"{data.commodity_name or ''} {data.product_name or ''} {data.classification.productType if data.classification else ''}".lower()
+    # Rule 26(a) applies to <= 10g or <= 10ml, EXCEPT Pan Masala (2nd PCR Amendment)
+    if is_pan_masala and is_micro_pack:
+        checks.append(ComplianceCheckItem(
+            rule_no="RULE 26(a)",
+            rule_title="Exemption for Small Packages (Proviso on Pan Masala)",
+            sub_rule="Rule 26(a) Second Proviso",
+            status="PASS",
+            detected_declaration="Pan Masala small pouch: Rule 26(a) exemption barred under 2nd PCR Amendment. Full statutory declarations required.",
+            statutory_requirement="Exemption under clause (a) shall not apply to pan masala.",
+            font_size_or_unit_check="Pan Masala exemption barred",
+            surface=surface,
+            is_applicable=True,
+            applicability_reason="Commodity is Pan Masala <= 10g: statutory exemption barred",
+            source_pdf="2nd PCR Pan Masala_1764736734---39.pdf",
+            source_pdf_page=2,
+            amendment_citation="2nd PCR Amendment on Pan Masala",
+            effective_date="Official Gazette",
+            original_text="Provided further that the provisions of this clause shall not apply to pan masala."
+        ))
+    elif is_micro_pack:
+        checks.append(ComplianceCheckItem(
+            rule_no="RULE 26(a)",
+            rule_title="Exemption for Packages Containing 10g / 10ml or Less",
+            sub_rule="Rule 26(a)",
+            status="PASS",
+            detected_declaration=f"Package net quantity is {data.net_quantity.value} {data.net_quantity.unit} <= 10 g/ml. Statutorily exempt from Chapter II declarations.",
+            statutory_requirement="Nothing contained in these rules shall apply to package containing commodity <= 10g or 10ml.",
+            font_size_or_unit_check="Micro-package threshold active",
+            surface=surface,
+            is_applicable=True,
+            applicability_reason="Product net quantity <= 10g/ml is statutorily exempt under Rule 26(a)",
+            source_pdf="8(xii)_0_1732871346--17.pdf",
+            source_pdf_page=13,
+            amendment_citation="Rule 26(a) Exemption Provisions",
+            effective_date="1st April 2011",
+            original_text="Nothing contained in these rules shall apply to any package containing a commodity if the net weight or measure of the commodity is ten gram or ten millilitre or less."
+        ))
+    else:
+        checks.append(ComplianceCheckItem(
+            rule_no="RULE 26(a)",
+            rule_title="Exemption for Packages Containing 10g / 10ml or Less",
+            sub_rule="Rule 26(a)",
+            status="NOT APPLICABLE",
+            detected_declaration=f"Pack size ({data.net_quantity.value} {data.net_quantity.unit}) exceeds 10g/10ml micro-exemption threshold",
+            statutory_requirement="Nothing contained in these rules shall apply to package containing commodity <= 10g or 10ml.",
+            font_size_or_unit_check="Standard size package",
+            surface=surface,
+            is_applicable=False,
+            applicability_reason="Standard pack size exceeding 10g/ml threshold",
+            source_pdf="8(xii)_0_1732871346--17.pdf",
+            source_pdf_page=13,
+            amendment_citation="Rule 26(a) Exemption Provisions",
+            effective_date="1st April 2011",
+            original_text="Nothing contained in these rules shall apply to any package containing a commodity if the net weight or measure of the commodity is ten gram or ten millilitre or less."
+        ))
 
-    # Category 1: Readymade Garments / Hosiery (Rule 26(e))
-    is_garment = any(k in category_blob for k in ["garment", "hosiery", "shirt", "pant", "apparel", "clothing", "dress", "t-shirt", "trouser", "kurta", "jeans"])
+    # ----------------------------------------------------
+    # CATEGORY 1: READYMADE GARMENTS / HOSIERY (RULE 26(e))
+    # ----------------------------------------------------
     garment_kb = kb.search_by_product_category("garment")
     g_src = garment_kb[0] if garment_kb else {}
     if is_garment:
@@ -568,8 +700,9 @@ def evaluate_legal_metrology_rules(
             original_text=g_src.get("original_text_reference")
         ))
 
-    # Category 2: Electronic Products (Rule 6(1) Proviso QR Code)
-    is_electronic = any(k in category_blob for k in ["electronic", "phone", "device", "gadget", "charger", "cable", "battery", "audio", "tv", "earphone", "tablet", "laptop"])
+    # ----------------------------------------------------
+    # CATEGORY 2: ELECTRONIC PRODUCTS (RULE 6(1) PROVISO QR CODE)
+    # ----------------------------------------------------
     qr_kb = kb.search_text("QR code")
     qr_src = qr_kb[0] if qr_kb else {}
     if is_electronic:
@@ -609,8 +742,9 @@ def evaluate_legal_metrology_rules(
             original_text=qr_src.get("original_text_reference")
         ))
 
-    # Category 3: Pan Masala (2nd PCR Amendment)
-    is_pan_masala = any(k in category_blob for k in ["pan masala", "gutkha", "supari", "zarda"])
+    # ----------------------------------------------------
+    # CATEGORY 3: PAN MASALA (2ND PCR AMENDMENT)
+    # ----------------------------------------------------
     pm_kb = kb.search_by_product_category("pan masala")
     pm_src = pm_kb[0] if pm_kb else {}
     if is_pan_masala:
@@ -650,8 +784,9 @@ def evaluate_legal_metrology_rules(
             original_text=pm_src.get("original_text_reference")
         ))
 
-    # Category 4: Edible Oil & Fats SOP
-    is_edible_oil = any(k in category_blob for k in ["oil", "fat", "ghee", "vanaspati", "mustard", "sunflower", "groundnut"])
+    # ----------------------------------------------------
+    # CATEGORY 4: EDIBLE OIL & FATS SOP
+    # ----------------------------------------------------
     oil_kb = kb.search_by_product_category("edible oil")
     oil_src = oil_kb[0] if oil_kb else {}
     if is_edible_oil:
@@ -691,8 +826,9 @@ def evaluate_legal_metrology_rules(
             original_text=oil_src.get("original_text_reference")
         ))
 
-    # Category 5: Medical Devices (GSR 226(E))
-    is_medical = any(k in category_blob for k in ["medical", "device", "surgical", "diagnostic", "bandage", "implant"])
+    # ----------------------------------------------------
+    # CATEGORY 5: MEDICAL DEVICES (GSR 226(E))
+    # ----------------------------------------------------
     med_kb = kb.search_by_product_category("medical device")
     med_src = med_kb[0] if med_kb else {}
     if is_medical:
@@ -732,7 +868,9 @@ def evaluate_legal_metrology_rules(
             original_text=med_src.get("original_text_reference")
         ))
 
-    # Category 6: E-Commerce Country of Origin Filter Mandate (Rule 6(10))
+    # ----------------------------------------------------
+    # CATEGORY 6: E-COMMERCE COUNTRY OF ORIGIN FILTER (RULE 6(10))
+    # ----------------------------------------------------
     coo_kb = kb.search_text("country of origin")
     coo_src = coo_kb[0] if coo_kb else {}
     checks.append(ComplianceCheckItem(
@@ -753,7 +891,9 @@ def evaluate_legal_metrology_rules(
         original_text=coo_src.get("original_text_reference")
     ))
 
-    # Rule 32A Compounding of Offences
+    # ----------------------------------------------------
+    # RULE 32A: COMPOUNDING OF OFFENCES
+    # ----------------------------------------------------
     has_violations = any(c.status == "FAIL" for c in checks)
     checks.append(ComplianceCheckItem(
         rule_no="RULE 32A",

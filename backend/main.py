@@ -392,25 +392,27 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         
     # Generate on-the-fly standard packaging docket for historical/sample IDs
     prod_data = StructuredProductData(
-        product_name="Lakmé Sun Expert Aqua Sun Gel SPF 50",
-        commodity_name="Sunscreen Gel (Cosmetic)",
-        manufacturer={"name": "Aero Care Personal Products LLP", "full_address": "Survey 284/2, Naroli, D&NH - 396235", "pin_code": "396235"},
-        net_quantity={"value": 50.0, "unit": "g", "raw_text": "Net Qty: 50 g"},
-        mrp={"amount": 499.0, "raw_text": "₹ 499.00 (inclusive of all taxes)"},
-        unit_sale_price="₹ 9.98 / g",
-        dates={"mfd": "02/2026", "expiry": "01/2028"},
-        batch_number="B-LK2026",
-        consumer_care={"phone": "1800-10-22-221", "email": "lever.care@unilever.com"}
+        product_name="Standard Pre-Packaged Commodity",
+        commodity_name="Packaged Retail Commodity",
+        manufacturer=AddressInfo(name="Registered Commodity Packer Ltd", full_address="Plot 12, Phase 1, Industrial Area, Gurugram, Haryana - 122001", pin_code="122001", has_valid_pin=True),
+        net_quantity=NetQuantityInfo(value=500.0, unit="g", raw_text="Net Qty: 500 g", complies_standard_units=True),
+        mrp=MrpInfo(amount=250.0, raw_text="₹ 250.00 (inclusive of all taxes)", tax_inclusive_statement_present=True, complies_tax_phrase=True),
+        unit_sale_price=UnitSalePriceInfo(raw_text="USP ₹0.50/g", value_per_unit="₹0.50/g", is_exempt=False),
+        mfd=DateInfo(raw_text="01/2026", month="01", year="2026"),
+        expiry=DateInfo(raw_text="01/2028", month="01", year="2028"),
+        batch="B-202601",
+        country_of_origin="India",
+        consumer_care=ConsumerCareInfo(phone="1800-11-4422", email="care@consumer-helpline.gov.in")
     )
     checks, score, overall = evaluate_legal_metrology_rules(prod_data, "Front (PDP)", False)
     scan_resp = ScanProcessResponse(
         scan_id=scan_id,
         product_info=prod_data,
         canonical_fields=[
-            CanonicalFieldItem(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.product_name, confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(b)"),
-            CanonicalFieldItem(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="50 g", confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(c) & Rule 13"),
-            CanonicalFieldItem(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 499.00 (incl. of all taxes)", confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(e)"),
-            CanonicalFieldItem(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value="Survey 284/2, Naroli, D&NH - 396235", confidence=0.98, status="DETECTED", rule_reference="Rule 6(1)(a) & Rule 10")
+            CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.commodity_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
+            CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="500 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
+            CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 250.00 (inclusive of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
+            CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value=prod_data.manufacturer.full_address, confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
         ],
         compliance_checks=checks,
         compliance_score=score,

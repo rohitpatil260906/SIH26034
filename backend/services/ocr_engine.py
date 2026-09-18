@@ -13,7 +13,6 @@ EASYOCR_INITIALIZED = False
 
 try:
     import pytesseract
-    # Test if tesseract binary is responding
     try:
         pytesseract.get_tesseract_version()
         TESSERACT_AVAILABLE = True
@@ -37,71 +36,135 @@ def get_easyocr_reader():
     return EASYOCR_READER
 
 # -------------------------------------------------------------------
-# STEP 3.1: MULTILINGUAL OCR RUNNER
+# OCR POST-PROCESSING & TYPO NORMALIZATION
 # -------------------------------------------------------------------
 
-def run_tesseract_ocr(pil_image: Image.Image, lang: str = "eng") -> List[Dict[str, Any]]:
-    """Runs Tesseract OCR if installed and returns line tokens with confidence and bounding boxes."""
+def normalize_ocr_token(text: str) -> str:
+    """Fuzzy fixes common OCR character confusions in statutory packaging contexts
+    without modifying legal meaning or inventing text.
+    """
+    if not text:
+        return ""
+    t = text.strip()
+    
+    # Common OCR confusions in MRP labels
+    t = re.sub(r'\bM8P\b', 'MRP', t, flags=re.I)
+    t = re.sub(r'\bNRP\b', 'MRP', t, flags=re.I)
+    t = re.sub(r'\bM\.?R\.?P\b', 'MRP', t, flags=re.I)
+    
+    # Common OCR confusions in taxes clause
+    t = re.sub(r'incl(?:\.|\b)\s*(?:of)?\s*al[l1]\s*taxes', 'inclusive of all taxes', t, flags=re.I)
+    t = re.sub(r'inc[l1]\.?\s*taxes', 'incl. of all taxes', t, flags=re.I)
+    
+    # Common OCR confusions in metric units (e.g. 50g where g looks like 9)
+    t = re.sub(r'(?<=\d)\s*(?:gms|gm)\b', ' g', t, flags=re.I)
+    t = re.sub(r'(?<=\d)\s*(?:kgs)\b', ' kg', t, flags=re.I)
+    
+    return t
+
+# -------------------------------------------------------------------
+# STEP 3.1: MULTILINGUAL OCR RUNNERS
+# -------------------------------------------------------------------
+
+def run_tesseract_ocr(pil_image: Image.Image, lang: str = "eng+hin") -> List[Dict[str, Any]]:
+    """Runs Tesseract OCR if installed and returns lines with normalized bounding boxes (0-100%)."""
     if not TESSERACT_AVAILABLE:
         return []
     try:
         import pytesseract
-        data = pytesseract.image_to_data(pil_image, lang=lang, output_type=pytesseract.Output.DICT)
+        w, h = pil_image.size
+        if w == 0 or h == 0:
+            return []
+        
+        try:
+            data = pytesseract.image_to_data(pil_image, lang=lang, output_type=pytesseract.Output.DICT)
+        except Exception:
+            # Fallback to English only if Hindi tessdata is missing
+            data = pytesseract.image_to_data(pil_image, lang="eng", output_type=pytesseract.Output.DICT)
+
         n_boxes = len(data['level'])
         lines = []
-        current_line_text = []
-        current_conf = []
+        current_words = []
+        current_confs = []
+        box_left, box_top, box_right, box_bottom = w, h, 0, 0
         
         for i in range(n_boxes):
-            text = data['text'][i].strip()
+            word = data['text'][i].strip()
             conf = float(data['conf'][i])
-            if text and conf > 15.0:
-                current_line_text.append(text)
-                current_conf.append(conf)
+            
+            if word and conf > 15.0:
+                current_words.append(word)
+                current_confs.append(conf)
+                x = data['left'][i]
+                y = data['top'][i]
+                bw = data['width'][i]
+                bh = data['height'][i]
+                box_left = min(box_left, x)
+                box_top = min(box_top, y)
+                box_right = max(box_right, x + bw)
+                box_bottom = max(box_bottom, y + bh)
             
             # End of line or block
-            if data['word_num'][i] == 0 and current_line_text:
-                full_text = " ".join(current_line_text)
-                avg_conf = float(np.mean(current_conf)) / 100.0 if current_conf else 0.85
+            if (data['word_num'][i] == 0 or i == n_boxes - 1) and current_words:
+                full_text = " ".join(current_words)
+                avg_conf = float(np.mean(current_confs)) / 100.0 if current_confs else 0.85
+                
+                # Convert to percentage [x, y, w, h]
+                norm_x = round(max(0.0, min(100.0, (box_left / w) * 100.0)), 2)
+                norm_y = round(max(0.0, min(100.0, (box_top / h) * 100.0)), 2)
+                norm_w = round(max(1.0, min(100.0, ((box_right - box_left) / w) * 100.0)), 2)
+                norm_h = round(max(1.0, min(100.0, ((box_bottom - box_top) / h) * 100.0)), 2)
+                
                 lines.append({
                     "engine": "Tesseract",
                     "text": full_text,
                     "confidence": round(avg_conf, 2),
-                    "bbox": [data['left'][i], data['top'][i], data['width'][i], data['height'][i]]
+                    "bbox": [norm_x, norm_y, norm_w, norm_h]
                 })
-                current_line_text = []
-                current_conf = []
+                current_words = []
+                current_confs = []
+                box_left, box_top, box_right, box_bottom = w, h, 0, 0
                 
-        if current_line_text:
-            full_text = " ".join(current_line_text)
-            avg_conf = float(np.mean(current_conf)) / 100.0 if current_conf else 0.85
-            lines.append({
-                "engine": "Tesseract",
-                "text": full_text,
-                "confidence": round(avg_conf, 2),
-                "bbox": [0, 0, pil_image.width, 20]
-            })
         return lines
     except Exception:
         return []
 
 def run_easyocr_lines(pil_image: Image.Image) -> List[Dict[str, Any]]:
-    """Runs EasyOCR if installed."""
+    """Runs EasyOCR if installed and returns lines with normalized bounding boxes (0-100%)."""
     reader = get_easyocr_reader()
     if not reader:
         return []
     try:
+        w, h = pil_image.size
+        if w == 0 or h == 0:
+            return []
+            
         arr = np.array(pil_image)
         results = reader.readtext(arr)
         lines = []
-        for bbox, text, conf in results:
-            if text.strip():
-                lines.append({
-                    "engine": "EasyOCR",
-                    "text": text.strip(),
-                    "confidence": round(float(conf), 2),
-                    "bbox": bbox
-                })
+        for poly, text, conf in results:
+            clean_text = text.strip()
+            if not clean_text:
+                continue
+                
+            # Poly format: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+            pts = np.array(poly)
+            x_min = float(np.min(pts[:, 0]))
+            y_min = float(np.min(pts[:, 1]))
+            x_max = float(np.max(pts[:, 0]))
+            y_max = float(np.max(pts[:, 1]))
+            
+            norm_x = round(max(0.0, min(100.0, (x_min / w) * 100.0)), 2)
+            norm_y = round(max(0.0, min(100.0, (y_min / h) * 100.0)), 2)
+            norm_w = round(max(1.0, min(100.0, ((x_max - x_min) / w) * 100.0)), 2)
+            norm_h = round(max(1.0, min(100.0, ((y_max - y_min) / h) * 100.0)), 2)
+            
+            lines.append({
+                "engine": "EasyOCR",
+                "text": clean_text,
+                "confidence": round(float(conf), 2),
+                "bbox": [norm_x, norm_y, norm_w, norm_h]
+            })
         return lines
     except Exception:
         return []
@@ -135,7 +198,6 @@ def verify_ocr_ensemble_and_disagreement(
         
     # Check numeric discrepancy for MRP or Quantity
     if field_name.lower() in ["mrp", "price", "retail_price"]:
-        # Extract numeric amounts
         nums = {}
         for eng, val in cleaned_candidates.items():
             m = re.search(r'([0-9]+(?:\.[0-9]+)?)', val)
@@ -168,7 +230,7 @@ def verify_ocr_ensemble_and_disagreement(
     else:
         # Significant textual discrepancy
         return (
-            f"Ambiguous OCR consensus across passes",
+            "Ambiguous OCR consensus across passes",
             0.50,
             True,
             "NEEDS REVIEW"
@@ -183,52 +245,91 @@ def extract_all_visible_lines(
     variants: Dict[str, Any],
     surface: str = "Front (PDP)"
 ) -> Tuple[List[ExtractedLine], str]:
-    """Scans the image using available OCR engines across multiple preprocessing variants.
+    """Scans the image using available OCR engines across multiple preprocessing variants
+    (original, contrast_enhanced, adaptive_threshold, clahe_enhanced, deskewed, resized).
+    
+    Includes orientation/rotation fallback to capture vertical, rotated, or curved text.
     Preserves EVERY visible textual region and line, keeping the full raw OCR transcript.
     """
     all_lines: List[ExtractedLine] = []
-    seen_texts = set()
-    raw_transcripts = []
+    seen_texts: List[str] = []
+    raw_transcripts: List[str] = []
     line_idx = 0
 
-    # 1. Try Tesseract & EasyOCR on enhanced variants
+    # Ordered list of preprocessing passes to query
+    pass_keys = [
+        "original",
+        "contrast_enhanced",
+        "adaptive_threshold",
+        "clahe_enhanced",
+        "deskewed",
+        "resized",
+        "sharpened"
+    ]
+
     engine_results = []
     
-    # Try on contrast enhanced
-    enh_img = variants.get("contrast_enhanced", (pil_image, None))[0]
-    tess_lines = run_tesseract_ocr(enh_img)
-    easy_lines = run_easyocr_lines(enh_img)
-    engine_results.extend(tess_lines)
-    engine_results.extend(easy_lines)
-    
-    # Try on adaptive threshold for dot-matrix
-    bin_img = variants.get("adaptive_threshold", (pil_image, None))[0]
-    bin_easy = run_easyocr_lines(bin_img)
-    engine_results.extend(bin_easy)
-    
-    # If no lines were returned by external binaries, run our high-accuracy domain text decoder
-    if not engine_results:
-        # Fallback: check if standard sample or high-resolution text is present
-        pass
+    for key in pass_keys:
+        if key in variants:
+            var_img = variants[key][0]
+            # Run Tesseract & EasyOCR
+            t_res = run_tesseract_ocr(var_img)
+            e_res = run_easyocr_lines(var_img)
+            engine_results.extend(t_res)
+            engine_results.extend(e_res)
+            
+    # Rotation handling: If fewer than 2 lines found, test 90° and 270° clockwise rotations
+    if len(engine_results) < 2:
+        for angle in [90, 270]:
+            try:
+                rot_img = pil_image.rotate(angle, expand=True)
+                t_rot = run_tesseract_ocr(rot_img)
+                e_rot = run_easyocr_lines(rot_img)
+                engine_results.extend(t_rot)
+                engine_results.extend(e_rot)
+            except Exception:
+                pass
 
+    # Deduplicate and normalize lines across passes
     for item in engine_results:
-        txt = item.get("text", "").strip()
-        if not txt or txt.lower() in seen_texts:
+        raw_txt = item.get("text", "").strip()
+        if not raw_txt:
             continue
-        seen_texts.add(txt.lower())
-        line_idx += 1
-        conf = item.get("confidence", 0.90)
-        is_unc = conf < 0.65 or "?" in txt
+            
+        norm_txt = normalize_ocr_token(raw_txt)
+        lower_norm = norm_txt.lower()
         
+        # Check if already captured by earlier or higher confidence pass
+        is_dup = False
+        for seen in seen_texts:
+            if difflib.SequenceMatcher(None, lower_norm, seen).ratio() > 0.85:
+                is_dup = True
+                break
+                
+        if is_dup:
+            continue
+            
+        seen_texts.append(lower_norm)
+        line_idx += 1
+        conf = float(item.get("confidence", 0.90))
+        is_unc = conf < 0.65 or "?" in norm_txt or "[unclear]" in norm_txt.lower()
+        
+        bbox_coords = item.get("bbox", [10.0, min(90.0, line_idx * 7.0), 80.0, 5.0])
         all_lines.append(ExtractedLine(
             line_index=line_idx,
-            text=txt,
+            text=norm_txt,
             confidence=conf,
-            bbox=BoundingBox(x=10.0, y=min(90.0, line_idx * 7.5), width=80.0, height=6.0),
+            bbox=BoundingBox(
+                x=float(bbox_coords[0]),
+                y=float(bbox_coords[1]),
+                width=float(bbox_coords[2]),
+                height=float(bbox_coords[3]),
+                label=f"Line {line_idx}"
+            ),
             is_uncertain=is_unc,
             surface=surface
         ))
-        raw_transcripts.append(txt)
+        raw_transcripts.append(norm_txt)
 
     full_transcript = "\n".join(raw_transcripts)
     return all_lines, full_transcript

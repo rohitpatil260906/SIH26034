@@ -19,7 +19,7 @@ import numpy as np
 import cv2
 
 # Ensure backend directory is in python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient
 from backend.main import app
