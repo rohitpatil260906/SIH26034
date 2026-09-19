@@ -1040,6 +1040,19 @@ def process_and_classify_text(
     canonical_fields: List[CanonicalField] = []
     evidence_map: Dict[str, FieldEvidence] = {}
 
+    # Invoke Universal Field Semantic Understanding Engine (18-Service Pipeline)
+    try:
+        from .semantic_engine import get_universal_pipeline
+        u_pipeline = get_universal_pipeline()
+        u_fields, u_dossiers = u_pipeline.process_surface_text(
+            lines=extracted_lines,
+            raw_transcript=joined_text,
+            surface=surface
+        )
+        data.universal_fields = u_fields
+    except Exception as e:
+        print(f"Notice: Semantic engine pipeline note: {e}")
+
     all_texts = [line.text.strip() for line in extracted_lines if line.text.strip()]
     joined_lower = joined_text.lower()
 
@@ -2393,7 +2406,8 @@ def build_lm_compass_dossier(
         violations=vio_items,
         needs_review=review_items,
         overall_status=overall_status,
-        overall_confidence=0.95
+        overall_confidence=0.95,
+        universal_fields=getattr(data, "universal_fields", [])
     )
 
 # -------------------------------------------------------------------
@@ -2516,6 +2530,13 @@ def fuse_multi_surface_extractions(
             if "mrp" in best_fields:
                 best_fields["mrp"].assignment_reasoning += " (CONSISTENT across panels)"
                 best_fields["mrp"].confidence = min(0.99, best_fields["mrp"].confidence + 0.03)
+
+    # Aggregate multi-surface universal fields
+    fused_u_fields = []
+    for surf, p_data, _, _ in normalized_extractions:
+        if hasattr(p_data, "universal_fields") and p_data.universal_fields:
+            fused_u_fields.extend(p_data.universal_fields)
+    fused_data.universal_fields = fused_u_fields
 
     fused_canonical = list(best_fields.values())
     return fused_data, fused_canonical, best_evidences

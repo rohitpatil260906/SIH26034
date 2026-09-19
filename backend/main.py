@@ -18,8 +18,17 @@ from .models import (
     MeasurementValidation,
     BenchmarkEvaluationResponse,
     SystemDiagnosticStatus,
-    LmCompassResult
+    LmCompassResult,
+    UniversalFieldObject,
+    Stage1Response,
+    Stage2Response,
+    Stage3Response,
+    Stage4Response
 )
+from .services.stage1_cv import Stage1Pipeline
+from .services.stage2_ocr import Stage2Pipeline
+from .services.stage3_semantic import Stage3Pipeline
+from .services.stage4_identity import Stage4Pipeline
 from .services.cv_pipeline import (
     decode_base64_image,
     store_original_evidence,
@@ -119,6 +128,167 @@ def get_system_diagnostics():
         external_government_api="External verification: Not available"
     )
 
+# Stage 1 Production Pipeline Instance
+stage1_pipeline = Stage1Pipeline()
+
+@app.post("/api/scan/stage1/ingest", response_model=Stage1Response)
+async def stage1_ingest_image(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 1: Image Ingestion, 18-Dimension Quality Analysis, and Package Localization.
+    Accepts multipart file upload or form-encoded base64 string.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage1_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage1_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage1/ingest-json", response_model=Stage1Response)
+def stage1_ingest_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 1 image processing."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage1_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 2 Universal Text Detection Pipeline Instance
+stage2_pipeline = Stage2Pipeline()
+
+@app.post("/api/scan/stage2/detect-text", response_model=Stage2Response)
+async def stage2_detect_text(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 2: Universal Text Detection + Advanced OCR Engine.
+    Detects all visible text regions, performs multi-pass ensemble, detects tables & barcodes.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage2_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage2_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage2/detect-text-json", response_model=Stage2Response)
+def stage2_detect_text_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 2 text detection."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage2_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 3 Production Pipeline Instance
+stage3_pipeline = Stage3Pipeline()
+
+@app.post("/api/scan/stage3/understand", response_model=Stage3Response)
+async def stage3_understand_text(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 3: Universal Text Meaning + Semantic Understanding Engine.
+    Interprets raw/normalized OCR into contextual, evidence-backed semantic fields.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage3_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage3_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage3/understand-json", response_model=Stage3Response)
+def stage3_understand_text_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 3 semantic understanding from base64 image or Stage 2 output."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage3_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 4 Production Pipeline Instance
+stage4_pipeline = Stage4Pipeline()
+
+@app.post("/api/scan/stage4/identify", response_model=Stage4Response)
+async def stage4_identify_entity(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 4: Universal Product + Company + Entity Identification from Any Panel.
+    Identifies Brand, Product Name, Category, Variant, Model, SKU, Batch, Country of Origin,
+    and all Commercial Entities (Manufacturer, Packer, Marketer, Importer) with address linking.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage4_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage4_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage4/identify-json", response_model=Stage4Response)
+def stage4_identify_entity_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 4 identity resolution from base64 image or Stage 3 output."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage4_pipeline.process_base64_image(data, filename=filename, source=source)
+
 @app.post("/api/scan/quality", response_model=ImageQualityMetrics)
 def check_image_quality(payload: Dict[str, str]):
     """Analyzes image quality across the 12 optical and statutory assessment checks."""
@@ -165,6 +335,54 @@ def detect_packaging_regions(payload: Dict[str, str]):
         }
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Region detection error: {str(e)}")
+
+@app.post("/api/scan/semantic-fields")
+def analyze_semantic_fields(payload: Dict[str, Any]):
+    """Analyzes text through the Universal Field Semantic Understanding Engine (18-Service Pipeline),
+    resolving raw tokens (e.g. '50 g', '₹299') into UniversalFieldObjects with full explainability dossiers.
+    """
+    from .services.semantic_engine import get_universal_pipeline
+    from .models import ExtractedLine
+
+    text_content = payload.get("text", "")
+    surface = payload.get("surface", "Front (PDP)")
+    image_data = payload.get("data")
+
+    pil_img = None
+    if image_data and len(image_data) > 50:
+        try:
+            pil_img = decode_base64_image(image_data)
+        except Exception:
+            pass
+
+    if not text_content and pil_img:
+        # Run OCR ensemble
+        pipeline = get_universal_pipeline()
+        variants = pipeline.preprocessing_service.generate_variants(pil_img, include_base64=False)
+        extracted_lines, raw_transcript = pipeline.ocr_ensemble_service.run_ensemble(pil_img, variants, surface)
+    elif text_content:
+        raw_transcript = text_content
+        lines_raw = text_content.split("\n")
+        extracted_lines = [
+            ExtractedLine(line_index=i + 1, text=l.strip(), confidence=0.95, surface=surface)
+            for i, l in enumerate(lines_raw) if l.strip()
+        ]
+    else:
+        raise HTTPException(status_code=400, detail="Either 'text' or 'data' (image base64) must be provided.")
+
+    pipeline = get_universal_pipeline()
+    u_fields, dossiers = pipeline.process_surface_text(
+        lines=extracted_lines,
+        raw_transcript=raw_transcript,
+        surface=surface,
+        image=pil_img
+    )
+
+    return {
+        "surface": surface,
+        "universal_fields": [f.dict() for f in u_fields],
+        "dossiers": [d.to_dict() for d in dossiers]
+    }
 
 @app.post("/api/scan/process", response_model=ScanProcessResponse)
 def process_scan(request: ScanProcessRequest):
@@ -308,6 +526,7 @@ def process_scan(request: ScanProcessRequest):
         labelme_annotation=labelme_ann,
         external_verification=ext_verif,
         lm_compass_result=lm_compass,
+        universal_fields=product_data.universal_fields,
         timestamp=datetime.utcnow().isoformat()
     )
 
