@@ -1231,10 +1231,29 @@ export function parseLabelAndCheckLegalMetrology(
   }
 
   // 6. Manufacturer / Packer Name & Address (Rule 6(1)(a) & Rule 10)
-  const mfgLine = lines.find(l => /mfg|manufactured|marketed|packed|imported|lic|pvt|ltd|mills|care|laboratories/i.test(l));
-  const pinMatch = text.match(/\b([1-9][0-9]{5})\b/);
-  let mfgAddress = mfgLine || (lines.length > 2 ? lines[2] : 'Packer / Manufacturer entity detected on packaging');
+  // 6. Manufacturer / Packer Name & Address (Rule 6(1)(a) & Rule 10)
+  const mfgIdx = lines.findIndex(l => /mfg|manufactured|marketed|packed|imported|lic|pvt|ltd|mills|care|laboratories|विनिर्माता|पैकर/i.test(l));
+  let mfgLine = mfgIdx !== -1 ? lines[mfgIdx] : '';
+  let mfgName = '';
+  let mfgAddress = '';
 
+  if (mfgLine) {
+    const strippedPrefix = mfgLine.replace(/^(?:mfd\.?\s*(?:by|at)?|mfg\.?\s*(?:by|at)?|manufactured\s*(?:by|at)?|packed\s*(?:by|at)?|marketed\s*by|imported\s*by)\s*[:.\-\s]*/i, '').trim();
+    if (strippedPrefix.length >= 3 && !/plot|sector|road|phase|industrial/i.test(strippedPrefix)) {
+      mfgName = strippedPrefix.split(',')[0].trim();
+      mfgAddress = strippedPrefix;
+    } else if (mfgIdx + 1 < lines.length) {
+      mfgName = lines[mfgIdx + 1].split(',')[0].trim();
+      mfgAddress = lines.slice(mfgIdx + 1, mfgIdx + 4).join(', ');
+    }
+  }
+
+  if (!mfgAddress && lines.length > 2) {
+    mfgAddress = lines.slice(1, 4).join(', ');
+    mfgName = lines[1].split(',')[0].trim();
+  }
+
+  const pinMatch = text.match(/\b([1-9][0-9]{5})\b/);
   if (pinMatch && !mfgAddress.includes(pinMatch[1])) {
     mfgAddress += ` (PIN: ${pinMatch[1]})`;
   }
@@ -1243,19 +1262,19 @@ export function parseLabelAndCheckLegalMetrology(
   declarations.push({
     id: `DEC-MFG-${timestamp}-6`,
     declarationType: 'Manufacturer Name & Address',
-    extractedValue: mfgAddress.slice(0, 140),
+    extractedValue: mfgAddress.slice(0, 140) || 'Not detected',
     expectedRequirement: 'Complete name & geographical address with postal PIN code under Rule 6(1)(a) and Rule 10',
     ruleReference: 'Rule 6(1)(a) & Rule 10',
     surface,
-    status: hasPinCode ? 'Found' : 'Defective',
-    confidence: 'High',
-    confidenceScore: 0.93,
-    officerStatus: hasPinCode ? 'Verified' : 'Flagged',
+    status: (mfgAddress && hasPinCode) ? 'Found' : (mfgAddress ? 'Defective' : 'Under Review'),
+    confidence: mfgAddress ? 'High' : 'Low',
+    confidenceScore: mfgAddress ? 0.93 : 0.45,
+    officerStatus: (mfgAddress && hasPinCode) ? 'Verified' : 'Flagged',
     correctionNotes: hasPinCode ? undefined : 'Manufacturer address is missing mandatory 6-digit Indian postal PIN code.',
-    boundingBox: { x: 10, y: 28, width: 80, height: 16, label: `Manufacturer: ${mfgAddress.slice(0, 24)}` }
+    boundingBox: { x: 10, y: 28, width: 80, height: 16, label: `Manufacturer: ${mfgName || mfgAddress.slice(0, 24)}` }
   });
 
-  if (!hasPinCode && mfgLine) {
+  if (!hasPinCode && mfgAddress) {
     violations.push({
       id: `VIO-${timestamp}-04`,
       violationType: 'Incomplete Manufacturer Postal Address (Missing PIN Code)',
@@ -1324,22 +1343,22 @@ export function parseLabelAndCheckLegalMetrology(
     boundingBox: { x: 10, y: 88, width: 40, height: 6, label: `Origin: ${countryOfOrigin}` }
   });
 
-  // 9. Batch / Lot Number (Rule 6(1)(g))
+  // 9. Batch / Lot Number (Rule 6(1)(g)) - STRICT ANTI-HALLUCINATION
   const batchMatch = text.match(/(?:batch\s*(?:no\.?|number)?|b\.?\s*no\.?|lot\s*(?:no\.?|number)?)\s*[:.\-\s]*([a-zA-Z0-9\/\-]+)/i);
-  const detectedBatch = batchMatch ? batchMatch[1].trim() : 'BATCH-' + new Date().getFullYear() + '/' + Math.floor(100 + Math.random() * 900);
+  const detectedBatch = batchMatch ? batchMatch[1].trim() : '';
 
   declarations.push({
     id: `DEC-BATCH-${timestamp}-9`,
     declarationType: 'Batch / Lot Number',
-    extractedValue: `Batch: ${detectedBatch}`,
+    extractedValue: detectedBatch ? `Batch: ${detectedBatch}` : 'Not detected on current surface',
     expectedRequirement: 'Mandatory manufacturing lot / batch identification under Rule 6(1)(g)',
     ruleReference: 'Rule 6(1)(g)',
     surface,
-    status: 'Found',
-    confidence: 'High',
-    confidenceScore: 0.95,
-    officerStatus: 'Verified',
-    boundingBox: { x: 10, y: 80, width: 40, height: 6, label: `Batch: ${detectedBatch}` }
+    status: detectedBatch ? 'Found' : 'Under Review',
+    confidence: detectedBatch ? 'High' : 'Low',
+    confidenceScore: detectedBatch ? 0.95 : 0.40,
+    officerStatus: detectedBatch ? 'Verified' : 'Pending',
+    boundingBox: { x: 10, y: 80, width: 40, height: 6, label: detectedBatch ? `Batch: ${detectedBatch}` : 'Batch Stamp' }
   });
 
   // 10. Principal Display Panel & Numeral Height (Rule 7 & Rule 8)
@@ -1379,20 +1398,26 @@ export function parseLabelAndCheckLegalMetrology(
     product_name: brandTitle,
     commodity_name: genericName,
     manufacturer: {
-      name: mfgLine ? mfgLine.slice(0, 50) : mfgAddress.slice(0, 50),
-      address: mfgAddress,
+      name: mfgName || 'Manufacturer Identified',
+      address: mfgAddress || 'Address on label',
       pin_code: pinMatch ? pinMatch[1] : undefined
     },
+    manufacturer_name: mfgName || undefined,
+    manufacturer_address: mfgAddress || undefined,
     packer: {
-      name: mfgLine ? mfgLine.slice(0, 50) : '',
-      address: mfgAddress
+      name: mfgName || '',
+      address: mfgAddress || ''
     },
+    packer_name: mfgName || undefined,
+    packer_address: mfgAddress || undefined,
     importer: {
       name: '',
       address: ''
     },
     net_quantity: netQtyDisplay || (netQty ? `${netQty.numeric} ${netQty.unit}` : ''),
+    units: netQty?.unit || 'g',
     mrp: mrp ? mrp.displayValue : '',
+    tax_inclusive_wording: mrp?.hasTaxStatement ? 'inclusive of all taxes' : '',
     unit_sale_price: uspMatch ? `₹ ${uspMatch[1]}/${uspMatch[2]}` : (isSmallPackage ? 'Exempt (≤ 100g/ml)' : ''),
     manufacturing_date: mfdMatch ? mfdMatch[1] : '',
     packing_date: '',
@@ -1404,14 +1429,23 @@ export function parseLabelAndCheckLegalMetrology(
       email: emailMatch ? emailMatch[0] : '',
       address: mfgAddress
     },
+    consumer_care_phone: phoneMatch ? phoneMatch[0] : undefined,
+    consumer_care_email: emailMatch ? emailMatch[0] : undefined,
+    consumer_care_address: mfgAddress || undefined,
     country_of_origin: countryOfOrigin,
     other_declarations: lines.filter(l => /lic|fssai|regn|veg|green|dot/i.test(l)).slice(0, 5)
   };
 
   const canonicalFields: CanonicalField[] = [
+    { field: 'brand', label: 'Brand Name', value: brandTitle.split(' ')[0] || 'Brand', confidence: 0.95, source: brandTitle, status: 'Detected', surface },
     { field: 'product_name', label: 'Product Name', value: brandTitle, confidence: 0.95, source: brandTitle, status: 'Detected', surface },
-    { field: 'commodity_name', label: 'Commodity Name', value: genericName, confidence: 0.94, source: genericName, status: 'Detected', surface },
+    { field: 'generic_name', label: 'Generic Commodity Name', value: genericName, confidence: 0.94, source: genericName, status: 'Detected', surface },
+    { field: 'category', label: 'Category', value: 'Packaged Commodity', confidence: 0.92, source: genericName, status: 'Detected', surface },
+    { field: 'manufacturer_name', label: 'Manufacturer Name', value: mfgName || 'Not Detected', confidence: mfgName ? 0.94 : 0.5, source: mfgAddress, status: mfgName ? 'Detected' : 'Missing', surface },
+    { field: 'manufacturer_address', label: 'Manufacturer Address', value: mfgAddress || 'Not Detected', confidence: hasPinCode ? 0.94 : 0.65, source: mfgAddress, status: (mfgAddress && hasPinCode) ? 'Detected' : (mfgAddress ? 'Defective' : 'Not Detected'), surface },
+    { field: 'country_of_origin', label: 'Country of Origin', value: countryOfOrigin, confidence: 0.95, source: countryOfOrigin, status: 'Detected', surface },
     { field: 'net_quantity', label: 'Net Quantity', value: structuredData.net_quantity || 'Not Detected', confidence: netQty ? 0.96 : 0.5, source: netQty?.rawMatch || '', status: netQty ? 'Detected' : 'Missing', surface },
+    { field: 'units', label: 'Unit Symbol', value: structuredData.units || 'g', confidence: 0.95, source: netQty?.unit || '', status: 'Detected', surface },
     {
       field: 'mrp',
       label: 'Retail Sale Price (MRP)',
@@ -1429,11 +1463,14 @@ export function parseLabelAndCheckLegalMetrology(
         : 'Not Detected',
       surface
     },
-    { field: 'manufacturer_name', label: 'Manufacturer Name', value: structuredData.manufacturer.name || 'Not Detected', confidence: mfgLine ? 0.93 : 0.5, source: mfgAddress, status: mfgLine ? 'Detected' : 'Missing', surface },
-    { field: 'manufacturer_address', label: 'Manufacturer Address', value: structuredData.manufacturer.address || 'Not Detected', confidence: hasPinCode ? 0.94 : 0.65, source: mfgAddress, status: hasPinCode ? 'Detected' : 'Unreadable', surface },
+    { field: 'tax_inclusive_wording', label: 'Tax Inclusive Wording', value: mrp?.hasTaxStatement ? 'inclusive of all taxes' : 'Not declared', confidence: 0.95, source: mrp?.displayValue || '', status: mrp?.hasTaxStatement ? 'Detected' : 'Defective', surface },
+    { field: 'unit_sale_price', label: 'Unit Sale Price', value: structuredData.unit_sale_price || 'Not declared', confidence: 0.90, source: uspMatch?.[0] || '', status: uspMatch || isSmallPackage ? 'Detected' : 'Not Detected', surface },
+    { field: 'manufacturing_date', label: 'Manufacturing Date', value: structuredData.manufacturing_date || 'Not detected', confidence: mfdMatch ? 0.94 : 0.5, source: mfdMatch?.[0] || '', status: mfdMatch ? 'Detected' : 'Not Detected', surface },
+    { field: 'expiry_date', label: 'Expiry Date', value: structuredData.expiry_or_best_before || 'Not detected', confidence: expMatch ? 0.94 : 0.5, source: expMatch?.[0] || '', status: expMatch ? 'Detected' : 'Not Detected', surface },
+    { field: 'batch_number', label: 'Batch Number', value: detectedBatch || 'Not detected', confidence: detectedBatch ? 0.95 : 0.4, source: batchMatch?.[0] || '', status: detectedBatch ? 'Detected' : 'Not Detected', surface },
     { field: 'consumer_care_phone', label: 'Consumer Helpline', value: structuredData.consumer_care.phone || 'Not Stated', confidence: phoneMatch ? 0.95 : 0.5, source: phoneMatch?.[0] || '', status: phoneMatch ? 'Detected' : 'Missing', surface },
     { field: 'consumer_care_email', label: 'Consumer Email', value: structuredData.consumer_care.email || 'Not Stated', confidence: emailMatch ? 0.96 : 0.5, source: emailMatch?.[0] || '', status: emailMatch ? 'Detected' : 'Missing', surface },
-    { field: 'country_of_origin', label: 'Country of Origin', value: countryOfOrigin, confidence: 0.95, source: countryOfOrigin, status: 'Detected', surface }
+    { field: 'consumer_care_address', label: 'Consumer Care Address', value: structuredData.consumer_care.address || 'Same as Manufacturer', confidence: 0.92, source: mfgAddress, status: mfgAddress ? 'Detected' : 'Missing', surface }
   ];
 
   const ruleEval = evaluateLegalMetrologyRules(structuredData, declarations, 'Packaged Commodity');

@@ -418,6 +418,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 c.rule_no.toLowerCase().includes(field.field_name.toLowerCase()) || 
                 (c.detected_declaration && c.detected_declaration.toLowerCase().includes(field.field_name.toLowerCase()))
               );
+              const isFound = field.status === 'Found' || field.status === 'DETECTED';
+              const isDefective = field.status === 'Defective';
+              const isMissing = field.status === 'Missing' || field.status === 'NOT DETECTED';
+              const decStatus: 'Found' | 'Defective' | 'Missing' | 'Under Review' = isFound ? 'Found' : (isDefective ? 'Defective' : (isMissing ? 'Missing' : 'Under Review'));
+
               decs.push({
                 id: `DEC-BK-${field.field_name}-${ts}-${idx}`,
                 declarationType: field.statutory_name || field.field_name,
@@ -425,11 +430,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 expectedRequirement: `Statutory declaration under ${field.rule_reference}`,
                 ruleReference: field.rule_reference,
                 surface: (field.detected_on_surface || primaryImg.surface) as SurfaceType,
-                status: field.status === 'DETECTED' ? 'Found' : (field.status === 'NOT DETECTED' ? 'Missing' : 'Under Review'),
+                status: decStatus,
                 confidence: field.confidence > 0.85 ? 'High' : (field.confidence > 0.6 ? 'Medium' : 'Low'),
                 confidenceScore: field.confidence,
-                officerStatus: field.status === 'DETECTED' ? 'Verified' : 'Pending',
-                correctionNotes: field.is_uncertain ? 'Low confidence / ambiguous declaration requiring physical review.' : undefined,
+                officerStatus: (isFound && !isDefective) ? 'Verified' : (isDefective ? 'Flagged' : 'Pending'),
+                correctionNotes: field.review_reason || (field.is_uncertain ? 'Low confidence / ambiguous declaration requiring physical review.' : undefined),
                 boundingBox: field.bbox ? { ...field.bbox, label: field.statutory_name } : { x: 15, y: 15 + idx * 10, width: 70, height: 8, label: field.statutory_name },
                 sourcePdf: matchingCheck?.source_pdf,
                 sourcePdfPage: matchingCheck?.source_pdf_page,
@@ -464,30 +469,54 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
             const pInfo = backendResponse.product_info || {};
             const mfgInfo = pInfo.manufacturer || {};
+            const packerInfo = pInfo.packer || {};
+            const importerInfo = pInfo.importer || {};
 
             const structData: StructuredProductData = {
               product_name: pInfo.product_name || 'Packaged Commodity',
               commodity_name: pInfo.commodity_name || 'Packaged Commodity',
+              brand: pInfo.brand || pInfo.product_name?.split(' ')[0] || '',
+              generic_name: pInfo.generic_name || pInfo.commodity_name || '',
+              category: pInfo.classification?.product_type || pInfo.commodity_name || 'Packaged Commodity',
               manufacturer: {
-                name: mfgInfo.name || 'Manufacturer',
-                address: mfgInfo.full_address || mfgInfo.address || 'Address',
+                name: pInfo.manufacturer_name || mfgInfo.name || '',
+                address: pInfo.manufacturer_address || mfgInfo.full_address || mfgInfo.address || '',
                 pin_code: mfgInfo.pin_code
               },
-              net_quantity: pInfo.net_quantity?.raw_text || (pInfo.net_quantity?.value ? `${pInfo.net_quantity.value} ${pInfo.net_quantity.unit}` : '50 g'),
-              mrp: pInfo.mrp?.raw_text || (pInfo.mrp?.amount ? `₹ ${pInfo.mrp.amount}` : '₹ 0.00'),
-              unit_sale_price: pInfo.unit_sale_price || '',
-              manufacturing_date: pInfo.dates?.mfd || '',
-              packing_date: '',
-              import_date: '',
-              expiry_or_best_before: pInfo.dates?.expiry || '',
-              batch_number: pInfo.batch_number || '',
-              packer: { name: '', address: '' },
-              importer: { name: '', address: '' },
-              consumer_care: {
-                phone: pInfo.consumer_care?.phone || '',
-                email: pInfo.consumer_care?.email || '',
-                address: mfgInfo.full_address || ''
+              manufacturer_name: pInfo.manufacturer_name || mfgInfo.name || '',
+              manufacturer_address: pInfo.manufacturer_address || mfgInfo.full_address || mfgInfo.address || '',
+              net_quantity: pInfo.net_quantity?.raw_text || (pInfo.net_quantity?.value ? `${pInfo.net_quantity.value} ${pInfo.net_quantity.unit}` : ''),
+              units: pInfo.net_quantity?.unit || '',
+              mrp: pInfo.mrp?.raw_text || (pInfo.mrp?.amount ? `₹ ${pInfo.mrp.amount}` : ''),
+              tax_inclusive_wording: pInfo.tax_inclusive_wording || (pInfo.mrp?.complies_tax_phrase ? 'inclusive of all taxes' : ''),
+              unit_sale_price: pInfo.unit_sale_price?.raw_text || (typeof pInfo.unit_sale_price === 'string' ? pInfo.unit_sale_price : ''),
+              manufacturing_date: pInfo.dates?.mfd || pInfo.mfd?.raw_text || '',
+              packing_date: pInfo.dates?.pkd || '',
+              import_date: pInfo.dates?.import_date || '',
+              best_before_date: pInfo.dates?.best_before || '',
+              expiry_date: pInfo.dates?.expiry || pInfo.expiry?.raw_text || '',
+              expiry_or_best_before: pInfo.dates?.expiry || pInfo.expiry?.raw_text || pInfo.dates?.best_before || '',
+              batch_number: pInfo.batch_number || pInfo.batch || '',
+              packer: {
+                name: pInfo.packer_name || packerInfo.name || '',
+                address: pInfo.packer_address || packerInfo.full_address || packerInfo.address || ''
               },
+              packer_name: pInfo.packer_name || packerInfo.name || '',
+              packer_address: pInfo.packer_address || packerInfo.full_address || packerInfo.address || '',
+              importer: {
+                name: pInfo.importer_name || importerInfo.name || '',
+                address: pInfo.importer_address || importerInfo.full_address || importerInfo.address || ''
+              },
+              importer_name: pInfo.importer_name || importerInfo.name || '',
+              importer_address: pInfo.importer_address || importerInfo.full_address || importerInfo.address || '',
+              consumer_care: {
+                phone: pInfo.consumer_care_phone || pInfo.consumer_care?.phone || '',
+                email: pInfo.consumer_care_email || pInfo.consumer_care?.email || '',
+                address: pInfo.consumer_care_address || mfgInfo.full_address || ''
+              },
+              consumer_care_phone: pInfo.consumer_care_phone || pInfo.consumer_care?.phone || '',
+              consumer_care_email: pInfo.consumer_care_email || pInfo.consumer_care?.email || '',
+              consumer_care_address: pInfo.consumer_care_address || mfgInfo.full_address || '',
               country_of_origin: pInfo.country_of_origin || 'India',
               other_declarations: []
             };
@@ -501,12 +530,12 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
             parsedResult = {
               isLakmeMatch: (pInfo.product_name || '').toLowerCase().includes('lakm'),
-              detectedBrand: pInfo.product_name?.split(' ')[0] || 'Brand',
+              detectedBrand: pInfo.brand || pInfo.product_name?.split(' ')[0] || 'Brand',
               detectedProductName: pInfo.product_name || 'Packaged Commodity',
               detectedCategory: pInfo.commodity_name || 'Packaged Commodity',
-              detectedManufacturer: mfgInfo.full_address || mfgInfo.name || '',
+              detectedManufacturer: pInfo.manufacturer_name || mfgInfo.name || mfgInfo.full_address || '',
               detectedBarcode: '',
-              detectedBatch: pInfo.batch_number || '',
+              detectedBatch: pInfo.batch_number || pInfo.batch || '',
               declarations: decs,
               violations: vios,
               extractedLines: backendResponse.extracted_lines.map(l => ({
@@ -523,8 +552,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 label: cf.statutory_name || cf.field_name,
                 value: cf.extracted_value,
                 confidence: cf.confidence,
-                source: cf.extracted_value,
-                status: cf.status === 'DETECTED' ? 'Detected' : (cf.status === 'NOT DETECTED' ? 'Not Detected' : 'Unreadable'),
+                source: cf.raw_ocr_value || cf.extracted_value,
+                raw_ocr_value: cf.raw_ocr_value,
+                confidence_level: cf.confidence_level,
+                review_reason: cf.review_reason,
+                status: (cf.status === 'Found' || cf.status === 'DETECTED') ? 'Detected' : (cf.status === 'Defective' ? 'Defective' : (cf.status === 'Missing' || cf.status === 'NOT DETECTED' ? 'Not Detected' : (cf.status === 'Not Applicable' ? 'Not Applicable' : 'Needs Review'))),
                 bbox: cf.bbox,
                 surface: (cf.detected_on_surface || primaryImg.surface) as SurfaceType
               })),

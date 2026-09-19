@@ -396,14 +396,42 @@ export const StepDeclarations: React.FC = () => {
   const primaryImg = images[0];
   const structuredData = currentInspection.structuredData;
   const rawDecs = currentInspection.declarations || [];
+  const canonicalFields = currentInspection.canonicalFields || [];
 
   // Build evidence map combining structured data, declarations, and canonical fields
   const evidenceMap = useMemo(() => {
     const map: Record<string, FieldEvidence> = {};
 
     STATUTORY_FIELDS.forEach(field => {
-      const val = field.getValue(structuredData, rawDecs);
-      const isDetected = Boolean(val && val.trim() !== '');
+      // 1. Find matching canonical field from multi-pass OCR & entity extraction
+      const matchingCanonical = canonicalFields.find(cf =>
+        cf.field === field.key ||
+        cf.field.toLowerCase() === field.key.toLowerCase() ||
+        cf.label.toLowerCase() === field.label.toLowerCase()
+      );
+
+      const valFromSd = field.getValue(structuredData, rawDecs);
+      let val = '';
+      if (matchingCanonical && matchingCanonical.value && 
+          matchingCanonical.value !== 'Not detected on current surface' && 
+          matchingCanonical.value !== 'Not Detected on Package') {
+        val = matchingCanonical.value;
+      } else {
+        val = valFromSd;
+      }
+
+      const isDetected = Boolean(val && val.trim() !== '' && val !== 'Not detected on current surface' && val !== 'Not Detected on Package');
+
+      // Calibrated Confidence
+      let confidence = 0.0;
+      if (matchingCanonical && typeof matchingCanonical.confidence === 'number' && matchingCanonical.confidence > 0) {
+        confidence = matchingCanonical.confidence;
+      } else if (isDetected) {
+        confidence = 0.94;
+      }
+
+      // Raw OCR snippet
+      const rawSnippet = matchingCanonical?.source || matchingCanonical?.raw_ocr_value || '';
 
       // Default bounding boxes per area if not already defined
       let bbox = { x: 15, y: 20, width: 70, height: 10, label: field.label };
@@ -421,36 +449,53 @@ export const StepDeclarations: React.FC = () => {
         bbox = { x: 15, y: 90, width: 70, height: 8, label: field.label };
       }
 
-      // Check if existing declaration has specific bbox
+      // Check if existing declaration or canonical field has specific bbox
       const matchingDec = rawDecs.find(d =>
         d.declarationType.toLowerCase().includes(field.key.replace(/_/g, ' ')) ||
         field.label.toLowerCase().includes(d.declarationType.toLowerCase())
       );
-      if (matchingDec?.boundingBox) {
+      if (matchingCanonical?.bbox) {
+        bbox = { ...matchingCanonical.bbox, label: field.label };
+      } else if (matchingDec?.boundingBox) {
         bbox = { ...matchingDec.boundingBox, label: field.label };
       }
 
       let status: DeclarationCheckStatus = isDetected ? 'DETECTED' : field.defaultStatus;
-      if (!isDetected && field.isMandatory) {
+      if (matchingCanonical?.status) {
+        const cs = matchingCanonical.status.toLowerCase();
+        if (cs.includes('detected') || cs.includes('found')) {
+          status = 'DETECTED';
+        } else if (cs.includes('not detected') || cs.includes('missing')) {
+          status = 'NOT DETECTED';
+        } else if (cs.includes('defective') || cs.includes('review') || cs.includes('unreadable')) {
+          status = 'NEEDS REVIEW';
+        } else if (cs.includes('not applicable') || cs.includes('exempt')) {
+          status = 'NOT APPLICABLE';
+        }
+      }
+      if (!isDetected && field.isMandatory && status !== 'NEEDS REVIEW') {
         status = 'NOT DETECTED';
       }
+
+      const surface = matchingCanonical?.surface || matchingDec?.surface || primaryImg?.surface || 'Front (PDP)';
 
       map[field.key] = {
         field_name: field.key,
         label: field.label,
         value: isDetected ? val : 'Not Detected on Package',
-        confidence: isDetected ? 0.98 : 0.0,
-        source_text: isDetected ? val : '',
+        confidence: confidence,
+        source_text: rawSnippet || (isDetected ? val : ''),
         image_id: primaryImg?.id || 'img-primary',
-        surface: matchingDec?.surface || primaryImg?.surface || 'Front (PDP)',
+        surface: surface,
         bounding_box: bbox,
         status: status,
-        notes: matchingDec?.correctionNotes
+        rule_reference: field.ruleRef,
+        notes: matchingCanonical?.review_reason || matchingDec?.correctionNotes
       };
     });
 
     return map;
-  }, [structuredData, rawDecs, primaryImg]);
+  }, [structuredData, rawDecs, canonicalFields, primaryImg]);
 
   // Categories for filter
   const categories = useMemo(() => {
@@ -691,15 +736,14 @@ export const StepDeclarations: React.FC = () => {
             {/* Declarations Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-800 border-collapse">
-                <thead className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                <thead className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   <tr>
-                    <th className="py-2.5 px-4">Statutory Field</th>
-                    <th className="py-2.5 px-4">Detected Value on Packaging</th>
-                    <th className="py-2.5 px-4">Legal Metrology Rule</th>
-                    <th className="py-2.5 px-4">Status</th>
-                    <th className="py-2.5 px-4">Surface</th>
-                    <th className="py-2.5 px-4 text-center">Visual Evidence</th>
-                    <th className="py-2.5 px-4 text-right">Officer Calibration</th>
+                    <th className="py-3 px-4 min-w-[210px]">FIELD</th>
+                    <th className="py-3 px-4 min-w-[220px]">VALUE</th>
+                    <th className="py-3 px-3 min-w-[125px]">CONFIDENCE</th>
+                    <th className="py-3 px-4 min-w-[180px]">EVIDENCE</th>
+                    <th className="py-3 px-3 min-w-[115px]">STATUS</th>
+                    <th className="py-3 px-3 text-right min-w-[85px]">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -711,6 +755,8 @@ export const StepDeclarations: React.FC = () => {
                     const isReview = ev?.status === 'NEEDS REVIEW' || ev?.status === 'UNREADABLE';
                     const isExempt = ev?.status === 'NOT APPLICABLE';
 
+                    const confPercent = Math.round((ev?.confidence || 0) * 100);
+
                     return (
                       <tr
                         key={field.key}
@@ -721,31 +767,71 @@ export const StepDeclarations: React.FC = () => {
                             : 'hover:bg-slate-50/80'
                         }`}
                       >
-                        {/* Field Name & Category */}
+                        {/* 1. FIELD: Statutory Name, Key, Category, Mandatory badge, Rule Reference */}
                         <td className="py-3 px-4">
-                          <div className="space-y-0.5">
-                            <span className="font-semibold text-slate-900 block flex items-center">
-                              {field.label}
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                              <span className="font-bold text-slate-900 text-xs">
+                                {field.label}
+                              </span>
                               {field.isMandatory && (
-                                <span className="ml-1.5 text-[9px] text-red-600 font-bold uppercase bg-red-50 border border-red-200 px-1 rounded">
+                                <span className="text-[9px] text-red-600 font-bold uppercase bg-red-50 border border-red-200 px-1 py-0.2 rounded">
                                   Mandatory
                                 </span>
                               )}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block font-mono">
-                              {field.category}
-                            </span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-mono">
+                              <span className="text-slate-600 font-semibold">{field.key}</span>
+                              <span>•</span>
+                              <span className="text-slate-400">{field.category}</span>
+                            </div>
+                            <div className="pt-0.5">
+                              {(() => {
+                                const matchingDec = rawDecs.find(d =>
+                                  d.declarationType.toLowerCase().includes(field.key.replace(/_/g, ' ')) ||
+                                  field.label.toLowerCase().includes(d.declarationType.toLowerCase())
+                                );
+                                const matchingCheck = currentInspection.complianceChecks?.find(c => 
+                                  c.ruleNo.toLowerCase() === field.ruleRef.toLowerCase() ||
+                                  field.ruleRef.toLowerCase().includes(c.ruleNo.toLowerCase()) ||
+                                  c.requirement.toLowerCase().includes(field.label.toLowerCase())
+                                );
+                                const srcPdf = matchingDec?.sourcePdf || matchingCheck?.sourcePdf || '8_1732871406--1.pdf';
+                                const srcPage = matchingDec?.sourcePdfPage || matchingCheck?.sourcePdfPage || 1;
+                                const srcShort = srcPdf.replace('.pdf', '').split('/').pop()?.split('\\').pop() || srcPdf;
+
+                                return (
+                                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-0.5 text-[10px]">
+                                    <span className="font-semibold text-slate-700 bg-slate-100 px-1 rounded border border-slate-200">
+                                      {field.ruleRef}
+                                    </span>
+                                    <span
+                                      className="inline-flex items-center text-[9px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-1 rounded truncate max-w-[120px]"
+                                      title={`Gazette: ${srcPdf} p.${srcPage}`}
+                                    >
+                                      📄 p.{srcPage}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </td>
 
-                        {/* Value */}
-                        <td className="py-3 px-4 max-w-xs">
-                          <div className="space-y-1">
+                        {/* 2. VALUE: Normalized statutory value + Raw OCR snippet */}
+                        <td className="py-3 px-4">
+                          <div className="space-y-1.5 max-w-sm">
                             <span className={`font-mono text-xs block break-words ${
                               isMissing ? 'text-red-600 italic font-sans' : 'text-slate-900 font-semibold'
                             }`}>
                               {ev?.value || '—'}
                             </span>
+                            {ev?.source_text && ev.source_text !== ev.value && (
+                              <div className="text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 font-mono break-all line-clamp-2" title={`Raw OCR Snippet: ${ev.source_text}`}>
+                                <span className="text-slate-400 font-sans font-medium mr-1">Raw OCR:</span>
+                                {ev.source_text}
+                              </div>
+                            )}
                             {ev?.notes && (
                               <span className="inline-block text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                                 Note: {ev.notes}
@@ -754,49 +840,72 @@ export const StepDeclarations: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Rule Ref & Knowledge Base Source Gazette */}
-                        <td className="py-3 px-4 text-[11px] text-slate-600">
-                          {(() => {
-                            const matchingDec = rawDecs.find(d =>
-                              d.declarationType.toLowerCase().includes(field.key.replace(/_/g, ' ')) ||
-                              field.label.toLowerCase().includes(d.declarationType.toLowerCase())
-                            );
-                            const matchingCheck = currentInspection.complianceChecks?.find(c => 
-                              c.ruleNo.toLowerCase() === field.ruleRef.toLowerCase() ||
-                              field.ruleRef.toLowerCase().includes(c.ruleNo.toLowerCase()) ||
-                              c.requirement.toLowerCase().includes(field.label.toLowerCase())
-                            );
-                            const srcPdf = matchingDec?.sourcePdf || matchingCheck?.sourcePdf || '8_1732871406--1.pdf';
-                            const srcPage = matchingDec?.sourcePdfPage || matchingCheck?.sourcePdfPage || 1;
-                            const srcShort = srcPdf.replace('.pdf', '').split('/').pop()?.split('\\').pop() || srcPdf;
-                            const amendCite = matchingDec?.amendmentCitation || matchingCheck?.amendmentCitation;
-
-                            return (
-                              <div className="space-y-1">
-                                <span className="font-mono font-semibold text-slate-900 block">{field.ruleRef}</span>
-                                <div className="flex items-center space-x-1 flex-wrap gap-y-0.5">
-                                  <span
-                                    className="inline-flex items-center text-[9px] font-medium bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded max-w-[140px] truncate"
-                                    title={`Source Gazette PDF: ${srcPdf}`}
-                                  >
-                                    📄 {srcShort}
+                        {/* 3. CONFIDENCE: Score badge: High (≥88%), Medium (65-87%), Low (<65%), or Needs Review */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {isDetected ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-1.5">
+                                {confPercent >= 88 ? (
+                                  <span className="inline-flex items-center text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                    {confPercent}% High
                                   </span>
-                                  <span className="inline-flex items-center text-[9px] font-bold font-mono text-blue-700 bg-blue-50 border border-blue-200 px-1 rounded">
-                                    p. {srcPage}
+                                ) : confPercent >= 65 ? (
+                                  <span className="inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                    {confPercent}% Med
                                   </span>
-                                </div>
-                                {amendCite && (
-                                  <span className="text-[9px] text-indigo-700 font-medium block truncate max-w-[180px]" title={amendCite}>
-                                    {amendCite}
+                                ) : (
+                                  <span className="inline-flex items-center text-[10px] font-bold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                    {confPercent}% Low
                                   </span>
                                 )}
                               </div>
-                            );
-                          })()}
+                              <div className="w-16 bg-slate-200 h-1 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${
+                                    confPercent >= 88 ? 'bg-emerald-500' : confPercent >= 65 ? 'bg-amber-500' : 'bg-rose-500'
+                                  }`}
+                                  style={{ width: `${confPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : isReview ? (
+                            <span className="inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              Needs Review
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-mono">—</span>
+                          )}
                         </td>
 
-                        {/* Status Badge */}
+                        {/* 4. EVIDENCE: Surface badge, source text snippet, and interactive "Inspect Region" button linked to ImageEvidenceViewer */}
                         <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] font-mono font-medium text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                {ev?.surface || 'Front (PDP)'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectField(field.key);
+                                }}
+                                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition inline-flex items-center space-x-1 ${
+                                  isSelected
+                                    ? 'bg-amber-500 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                                }`}
+                                title="Inspect Region on Packaging Image"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>{isSelected ? 'Inspecting' : 'Inspect'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 5. STATUS: Detected / Defective / Missing / Needs Review / Not Applicable */}
+                        <td className="py-3 px-3 whitespace-nowrap">
                           {isDetected && (
                             <span className="inline-flex items-center text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                               <Check className="w-3 h-3 mr-1 text-emerald-600" /> Detected
@@ -819,33 +928,8 @@ export const StepDeclarations: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Surface */}
-                        <td className="py-3 px-4 text-[11px] font-mono text-slate-600 whitespace-nowrap">
-                          {ev?.surface || 'Front (PDP)'}
-                        </td>
-
-                        {/* View Bounding Box button */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectField(field.key);
-                            }}
-                            className={`px-2 py-1 rounded text-[11px] font-semibold transition flex items-center justify-center space-x-1 mx-auto ${
-                              isSelected
-                                ? 'bg-amber-500 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                            title="Highlight on Packaging Image"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>{isSelected ? 'Viewing' : 'Inspect'}</span>
-                          </button>
-                        </td>
-
-                        {/* Officer Calibration Actions */}
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        {/* 6. ACTIONS: Officer Calibrate / Flag */}
+                        <td className="py-3 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end space-x-1" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"

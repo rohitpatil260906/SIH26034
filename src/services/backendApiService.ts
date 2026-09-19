@@ -94,6 +94,10 @@ export interface ScanProcessApiResponse {
     penal_provision?: string | null;
     is_uncertain?: boolean;
     detected_on_surface: string;
+    raw_ocr_value?: string;
+    confidence_level?: string;
+    review_reason?: string;
+    evidence_crop_base64?: string;
   }>;
   compliance_checks: Array<{
     rule_no: string;

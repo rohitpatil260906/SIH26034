@@ -34,23 +34,33 @@ class LabelMeAnnotation(BaseModel):
     imageWidth: int = 1000
 
 class ImageQualityMetrics(BaseModel):
-    """12 statutory & optical image quality assessment metrics."""
+    """14 statutory & optical image quality assessment metrics."""
     resolution_megapixels: float = 0.0
     width: int = 0
     height: int = 0
+    resolution: Optional[str] = None
     blur_laplacian_variance: float = 0.0
     is_blurred: bool = False
+    focus_score: float = 85.0
     noise_variance: float = 0.0
     is_noisy: bool = False
     mean_brightness: float = 0.0
+    brightness: Optional[float] = None
     contrast_std_dev: float = 0.0
+    contrast: Optional[float] = None
     glare_percentage: float = 0.0
     is_glare_detected: bool = False
+    shadow_detected: bool = False
     rotation_angle_deg: float = 0.0
     perspective_distortion_detected: bool = False
     skew_angle_deg: float = 0.0
+    skew_angle: Optional[float] = None
+    estimated_text_size_px: float = 14.0
+    estimated_glyph_height_px: Optional[float] = None
+    margin_clipping_risk: Optional[str] = "Low"
     background_interference_score: float = 0.0
     text_visibility: str = "Optimal"
+    image_completeness: str = "Complete (100% visible)"
     overall_quality_score: int = 85
     advisory: Optional[str] = None
 
@@ -97,18 +107,25 @@ class ExtractedLine(BaseModel):
     surface: str = "Front (PDP)"
     matched_rule: Optional[str] = None
     classification: Optional[str] = None
+    raw_text: Optional[str] = None
+    preprocessing_version: Optional[str] = None
+    engine: Optional[str] = None
 
 class CanonicalField(BaseModel):
     field_name: str
     statutory_name: str
     extracted_value: str
     confidence: float
-    status: str  # 'Found', 'Defective', 'Missing', 'Under Review'
+    status: str  # 'Found', 'Defective', 'Missing', 'Under Review', 'Not Applicable'
     bbox: Optional[BoundingBox] = None
     rule_reference: str
     penal_provision: Optional[str] = None
     is_uncertain: bool = False
     detected_on_surface: str = "Front (PDP)"
+    raw_ocr_value: Optional[str] = None
+    evidence_crop_base64: Optional[str] = None
+    confidence_level: Optional[str] = None  # 'High', 'Medium', 'Low', 'Needs Review'
+    review_reason: Optional[str] = None
 
 class AddressInfo(BaseModel):
     name: str = ""
@@ -117,6 +134,8 @@ class AddressInfo(BaseModel):
     state: Optional[str] = None
     country: str = "India"
     has_valid_pin: bool = False
+    entity_type: str = "Manufacturer"  # Manufacturer, Packer, Importer, Marketer
+    raw_lines: List[str] = Field(default_factory=list)
 
 class NetQuantityInfo(BaseModel):
     raw_text: str = ""
@@ -201,15 +220,28 @@ class StructuredProductData(BaseModel):
     generic_name: Optional[str] = None
     variant: Optional[str] = None
     manufacturer: AddressInfo = Field(default_factory=AddressInfo)
+    manufacturer_name: Optional[str] = None
+    manufacturer_address: Optional[str] = None
     packer: Optional[AddressInfo] = None
+    packer_name: Optional[str] = None
+    packer_address: Optional[str] = None
     importer: Optional[AddressInfo] = None
+    importer_name: Optional[str] = None
+    importer_address: Optional[str] = None
+    brand_owner: Optional[str] = None
     net_quantity: NetQuantityInfo = Field(default_factory=NetQuantityInfo)
     mrp: MrpInfo = Field(default_factory=MrpInfo)
+    tax_inclusive_wording: Optional[str] = None
     unit_sale_price: Optional[UnitSalePriceInfo] = None
     mfd: DateInfo = Field(default_factory=DateInfo)
     expiry: Optional[DateInfo] = None
+    dates: Optional[Dict[str, str]] = None
     batch: str = ""
+    batch_number: Optional[str] = None
     consumer_care: ConsumerCareInfo = Field(default_factory=ConsumerCareInfo)
+    consumer_care_phone: Optional[str] = None
+    consumer_care_email: Optional[str] = None
+    consumer_care_address: Optional[str] = None
     country_of_origin: str = "India"
     table1_numeral_height: Table1HeightCheck = Field(default_factory=Table1HeightCheck)
     other_declarations: List[str] = Field(default_factory=list)

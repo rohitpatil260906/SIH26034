@@ -182,6 +182,7 @@ export interface StructuredProductData {
   quantity_per_package?: string;
   total_multipack_quantity?: string;
   unit_of_measurement?: string;
+  units?: string;
 
   // 21-23: Price Information
   mrp: string;
@@ -193,7 +194,9 @@ export interface StructuredProductData {
   packing_date: string;
   import_date: string;
   best_before?: string;
+  best_before_date?: string;
   use_by_expiry?: string;
+  expiry_date?: string;
   expiry_or_best_before: string;
 
   // 29-31: Batch Identification
@@ -228,10 +231,14 @@ export interface CanonicalField {
   value: string;
   confidence: number;
   source: string;
-  status: 'Detected' | 'Not Detected' | 'Unreadable' | 'Missing';
+  status: 'Detected' | 'Not Detected' | 'Unreadable' | 'Missing' | 'Defective' | 'Needs Review' | 'Not Applicable' | string;
   bbox?: BoundingBox;
   imageNumber?: number;
   surface?: SurfaceType;
+  raw_ocr_value?: string;
+  confidence_level?: string;
+  review_reason?: string;
+  crop_base64?: string;
 }
 
 export interface ComplianceCheckItem {
