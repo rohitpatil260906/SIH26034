@@ -172,32 +172,73 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(a): Manufacturer Address & Postal PIN code
     # ----------------------------------------------------
     mfg = data.manufacturer
+    mkt = getattr(data, "marketer", None)
     mfg_has_pin = bool(mfg.has_valid_pin or (mfg.pin_code and len(mfg.pin_code) == 6))
-    if mfg.full_address in ["", "Not detected"]:
-        if is_image_degraded:
-            mfg_status = "NEEDS REVIEW"
-            mfg_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
-            mfg_penal = None
-        elif is_single_front_surface:
-            mfg_status = "NEEDS REVIEW"
-            mfg_finding = "Manufacturer/packer address not detected on Front (PDP). May legally appear on back/side panel under Rule 6(2). Provide back panel image."
-            mfg_penal = None
-        else:
-            mfg_status = "FAIL"
-            mfg_finding = "Manufacturer / packer address omitted across all inspected packaging panels"
-            mfg_penal = "Section 36(1) read with Rule 10(1)"
-    elif mfg.name and mfg_has_pin:
+    mkt_has_pin = bool(mkt and (mkt.has_valid_pin or (mkt.pin_code and len(mkt.pin_code) == 6)))
+
+    mfg_ev_bbox = data.evidence.get("manufacturer_address").bounding_box if (data.evidence and "manufacturer_address" in data.evidence) else None
+    mkt_ev_bbox = data.evidence.get("marketer").bounding_box if (data.evidence and "marketer" in data.evidence) else None
+
+    vio_ev_text = None
+    vio_ev_bbox = None
+
+    if mfg.name and mfg_has_pin:
         mfg_status = "PASS"
         mfg_finding = f"{mfg.name}, {mfg.full_address} (Postal PIN: {mfg.pin_code})"
         mfg_penal = None
+        mfg_box = mfg_ev_bbox or BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Manufacturer")
     elif mfg.name and not mfg_has_pin:
         mfg_status = "FAIL"
         mfg_finding = f"{mfg.full_address} (Violation: 6-digit postal PIN code missing)"
         mfg_penal = "Section 36(1) read with Rule 10(1) Compounding fee: ₹25,000"
+        vio_ev_text = mfg.full_address
+        vio_ev_bbox = mfg_ev_bbox or BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Manufacturer Address (Missing PIN)")
+        mfg_box = vio_ev_bbox
+    elif mkt and mkt.name:
+        # Marketer declared!
+        if mkt_has_pin:
+            if is_single_front_surface:
+                mfg_status = "NEEDS REVIEW"
+                mfg_finding = f"Marketed by {mkt.name}, {mkt.full_address} (Postal PIN: {mkt.pin_code}). Manufacturer / packer details not detected on current panel. Verify secondary panels under Rule 6(2)."
+                mfg_penal = None
+                mfg_box = mkt_ev_bbox or BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Marketer Declaration")
+            else:
+                mfg_status = "NEEDS REVIEW"
+                mfg_finding = f"Marketed by {mkt.name} (PIN: {mkt.pin_code}). Manufacturer / packer name not declared on packaging; verify distributor license."
+                mfg_penal = None
+                mfg_box = mkt_ev_bbox or BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Marketer Declaration")
+        else:
+            mfg_status = "FAIL"
+            mfg_finding = f"Marketed by {mkt.name}, {mkt.full_address} (Violation: Marketer address missing 6-digit postal PIN code)"
+            mfg_penal = "Section 36(1) read with Rule 10(1)"
+            vio_ev_text = mkt.full_address
+            vio_ev_bbox = mkt_ev_bbox or BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Marketer Address (Missing PIN)")
+            mfg_box = vio_ev_bbox
+    elif mfg.full_address in ["", "Not detected", None]:
+        if is_image_degraded:
+            mfg_status = "NEEDS REVIEW"
+            mfg_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
+            mfg_penal = None
+            mfg_box = None
+        elif is_single_front_surface:
+            mfg_status = "NEEDS REVIEW"
+            mfg_finding = "Manufacturer/packer address not detected on Front (PDP). May legally appear on back/side panel under Rule 6(2). Provide back panel image."
+            mfg_penal = None
+            mfg_box = None
+        else:
+            mfg_status = "FAIL"
+            mfg_finding = "Manufacturer / packer address omitted across all inspected packaging panels"
+            mfg_penal = "Section 36(1) read with Rule 10(1)"
+            vio_ev_text = "Omitted across all inspected panels"
+            vio_ev_bbox = None
+            mfg_box = None
     else:
         mfg_status = "FAIL"
         mfg_finding = "Manufacturer / packer address omitted from packaging"
         mfg_penal = "Section 36(1) read with Rule 10(1)"
+        vio_ev_text = "Omitted from packaging"
+        vio_ev_bbox = None
+        mfg_box = None
 
     checks.append(ComplianceCheckItem(
         rule_no="RULE 6(1)(a)",
@@ -208,8 +249,10 @@ def evaluate_legal_metrology_rules(
         statutory_requirement="Name and complete postal address including 6-digit postal PIN code must be printed prominently.",
         font_size_or_unit_check="PIN Code 6-digit verification",
         section_penalty=mfg_penal,
-        bounding_box=BoundingBox(x=12.0, y=55.0, width=75.0, height=8.0, label="Manufacturer"),
-        surface=surface
+        bounding_box=mfg_box,
+        surface=surface,
+        violation_evidence_text=vio_ev_text,
+        violation_evidence_bbox=vio_ev_bbox
     ))
 
     # ----------------------------------------------------
@@ -233,7 +276,11 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(c): Net Quantity & Authorized SI Metric Units
     # ----------------------------------------------------
     net = data.net_quantity
-    if net.value == 0.0:
+    if getattr(net, "has_contradiction", False):
+        net_status = "NEEDS REVIEW"
+        net_finding = getattr(net, "contradiction_note", "CONFLICT DETECTED: Discrepancy between packaging panels; routed to Needs Review.")
+        net_penal = None
+    elif net.value == 0.0:
         if is_image_degraded:
             net_status = "NEEDS REVIEW"
             net_finding = "Unable to verify net quantity from degraded image. Physical check required."
@@ -343,7 +390,11 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(e): Maximum Retail Price (MRP) & Tax Phrase
     # ----------------------------------------------------
     mrp = data.mrp
-    if mrp.is_uncertain:
+    if getattr(mrp, "has_contradiction", False):
+        mrp_status = "NEEDS REVIEW"
+        mrp_finding = getattr(mrp, "contradiction_note", "CONFLICT DETECTED: Conflicting MRPs between packaging panels; routed to Needs Review.")
+        mrp_penal = None
+    elif mrp.is_uncertain:
         mrp_status = "NEEDS REVIEW"
         mrp_finding = "Disagreement detected across OCR engines on price amount. Flagged for officer physical review."
         mrp_penal = None
@@ -536,7 +587,11 @@ def evaluate_legal_metrology_rules(
     # ----------------------------------------------------
     # RULE 10: Manufacturer Name & Complete Address with PIN
     # ----------------------------------------------------
-    if mfg.full_address in ["", "Not detected"]:
+    if mkt and mkt.name and mkt_has_pin and mfg.full_address in ["", "Not detected"]:
+        r10_status = "NEEDS REVIEW"
+        r10_finding = f"Marketed by {mkt.name}, {mkt.full_address} (Postal PIN: {mkt.pin_code}). Manufacturer / packer address not detected; verify marketer/distributor agreement under Rule 6(1)(a) proviso."
+        r10_penal = None
+    elif mfg.full_address in ["", "Not detected"]:
         if is_image_degraded:
             r10_status = "NEEDS REVIEW"
             r10_finding = "Unable to verify manufacturer address from degraded image. Check secondary panel."
@@ -1016,6 +1071,9 @@ def evaluate_legal_metrology_rules(
             chk.detected_declaration = "Unable to verify declaration from degraded image. Physical inspector check required."
             chk.section_penalty = None
 
+    # Apply strict evidence-first violation validation under Master Prompt Section 22 and 24
+    validate_violation_evidence(checks, data)
+
     # Calculate compliance score
     applicable_checks = [c for c in checks if c.status in ("PASS", "FAIL")]
     total_applicable = len(applicable_checks)
@@ -1030,3 +1088,64 @@ def evaluate_legal_metrology_rules(
         overall = "COMPLIANT"
 
     return checks, score, overall
+
+
+def validate_violation_evidence(checks: List[ComplianceCheckItem], data: StructuredProductData) -> None:
+    """Evidence-first violation validation under Master Prompt Section 24 and Section 22:
+    - Every violation requires exact evidence text and bounding box.
+    - If a violation targets ingredients or directions (e.g. claiming they are an address or missing PIN),
+      it MUST be rejected and cleared.
+    - If a manufacturer address was omitted, the violation is 'Manufacturer/packer address omitted',
+      NOT 'Address Missing PIN', and must NOT point to ingredients or directions.
+    - If marketer was declared with a PIN, do NOT raise 'Address Missing PIN'.
+    """
+    for chk in checks:
+        if chk.status == "FAIL":
+            det_lower = (chk.detected_declaration or "").lower()
+            ev_lower = (chk.violation_evidence_text or "").lower()
+
+            # Rule 6(1)(a) & Rule 10 validations
+            if "6(1)(a)" in chk.rule_no or "Rule 10" in chk.sub_rule or "RULE 10" in chk.rule_no:
+                marketer = getattr(data, "marketer", None)
+                if marketer and marketer.name and marketer.has_valid_pin:
+                    if "missing pin" in det_lower or "pin code missing" in det_lower or "missing pin" in ev_lower or "omitted" in det_lower:
+                        chk.detected_declaration = f"Marketed by {marketer.name} (PIN: {marketer.pin_code}). Manufacturer details not detected on this surface; verify distributor agreement under Rule 6(1)(a) proviso."
+                        chk.status = "NEEDS REVIEW"
+                        chk.section_penalty = None
+                        chk.violation_evidence_text = None
+                        chk.violation_evidence_bbox = None
+                        continue
+
+                # Formulation ingredients or directions must NEVER trigger address/PIN violation
+                if any(w in det_lower or w in ev_lower for w in [
+                    "aqua", "salicylic", "glycerin", "direction", "apply generously",
+                    "niacinamide", "sorbitan", "stearic", "octyl", "parfum", "tocopherol"
+                ]):
+                    chk.status = "NEEDS REVIEW"
+                    chk.detected_declaration = "Manufacturer/packer declaration requires physical inspection; formulation ingredients/directions must not be evaluated as commercial address."
+                    chk.section_penalty = None
+                    chk.violation_evidence_text = None
+                    chk.violation_evidence_bbox = None
+                    continue
+
+                if chk.bounding_box and getattr(chk.bounding_box, "label", "") == "Address Missing PIN":
+                    chk.bounding_box.label = "Manufacturer Declaration Panel"
+
+            # Populate evidence text and bbox from declaration if missing
+            if not chk.violation_evidence_text and chk.detected_declaration:
+                chk.violation_evidence_text = chk.detected_declaration
+            if not chk.violation_evidence_bbox and chk.bounding_box:
+                chk.violation_evidence_bbox = chk.bounding_box
+
+    # Re-sync Rule 32 and Rule 32A with final substantive violations
+    substantive_fails = [c for c in checks if c.status == "FAIL" and c.rule_no not in ("RULE 32", "RULE 32A")]
+    for chk in checks:
+        if chk.rule_no == "RULE 32":
+            chk.status = "FAIL" if substantive_fails else "PASS"
+            chk.detected_declaration = f"{len(substantive_fails)} active statutory contraventions detected" if substantive_fails else "Zero non-compliance detected"
+            chk.section_penalty = f"Statutory penalty schedule applicable ({len(substantive_fails)} offences)" if substantive_fails else None
+        elif chk.rule_no == "RULE 32A":
+            chk.status = "FAIL" if substantive_fails else "PASS"
+            chk.detected_declaration = "Compounding schedule applicable under Section 36(1)" if substantive_fails else "Clean docket - zero offences"
+            chk.section_penalty = "Rule 32A Statutory Compounding Schedule: ₹25,000" if substantive_fails else None
+

@@ -376,15 +376,28 @@ export function evaluateLegalMetrologyRules(
 
     // RULE 6(1)(a): Manufacturer, Packer, Importer & Country of Origin
     if (id === 'RULE-6-1-A') {
-      const mfgName = structuredData.manufacturer_name || structuredData.manufacturer.name;
-      const mfgAddr = structuredData.manufacturer_address || structuredData.manufacturer.address;
-      const hasPin = /\b[1-9][0-9]{5}\b/.test(mfgAddr);
+      const mfgName = structuredData.manufacturer_name || (structuredData.manufacturer?.name !== 'Manufacturer Identified' ? structuredData.manufacturer?.name : '');
+      const mfgAddr = structuredData.manufacturer_address || (structuredData.manufacturer?.address !== 'Address on label' ? structuredData.manufacturer?.address : '');
+      const hasMfgPin = /\b[1-9][0-9]{5}\b/.test(mfgAddr || '');
       const origin = structuredData.country_of_origin;
+
+      const marketerName = structuredData.marketer_name || structuredData.marketer?.name;
+      const marketerAddr = structuredData.marketer_address || structuredData.marketer?.address;
+      const marketerPin = structuredData.marketer?.pin_code || (marketerAddr?.match(/\b[1-9][0-9]{5}\b/)?.[1]) || structuredData.postal_pin;
+      const hasMarketerPin = !!marketerPin;
+
+      const packerName = structuredData.packer_name || (structuredData.packer?.name !== 'Manufacturer Identified' ? structuredData.packer?.name : '');
+      const packerAddr = structuredData.packer_address || structuredData.packer?.address;
+      const hasPackerPin = /\b[1-9][0-9]{5}\b/.test(packerAddr || '');
+
       const isLowConfidence = declarations.some(
         (d) => d.declarationType.includes('Manufacturer') && (d.status === 'Under Review' || d.confidence === 'Low')
       );
 
-      if (mfgName && mfgAddr && hasPin) {
+      // Guard: is mfgAddr accidentally containing ingredients/directions?
+      const isIngredientAddress = /(?:aqua|water|glycerin|salicylic|octocrylene|phenoxyethanol|apply\s*evenly|direction)/i.test(mfgAddr || '');
+
+      if (mfgName && mfgAddr && hasMfgPin && !isIngredientAddress) {
         checks.push({
           ruleId: id,
           ruleNo: rule.ruleNo,
@@ -396,7 +409,34 @@ export function evaluateLegalMetrologyRules(
           isApplicable: true,
           evidenceSource: `${mfgName}, ${mfgAddr}`
         });
-      } else if (mfgName && mfgAddr && !hasPin) {
+      } else if (!mfgName && marketerName && hasMarketerPin) {
+        // SECTION 24: If package has 'Marketed by' with valid PIN and no separate 'Manufactured by'
+        // System must recognize marketer, NOT emit "Address Missing PIN" violation, and flag for review.
+        checks.push({
+          ruleId: id,
+          ruleNo: rule.ruleNo,
+          subRule: rule.subRule,
+          requirement: 'Name and complete address of manufacturer / packer / importer with PIN code & Country of Origin',
+          detectedInfo: `Marketed by: ${marketerName}, ${marketerAddr || 'Address declared'} (PIN: ${marketerPin})`,
+          confidence: 0.92,
+          status: 'NEEDS REVIEW',
+          isApplicable: true,
+          evidenceSource: `Marketed by: ${marketerName}, ${marketerAddr || ''}`,
+          reason: `Marketed by address present with PIN (${marketerPin}); verify if separate manufacturer declaration is required under Rule 6(1)(a) or if marketer qualifies under proviso.`
+        });
+      } else if (packerName && packerAddr && hasPackerPin) {
+        checks.push({
+          ruleId: id,
+          ruleNo: rule.ruleNo,
+          subRule: rule.subRule,
+          requirement: 'Name and complete address of manufacturer / packer / importer with PIN code & Country of Origin',
+          detectedInfo: `Packer: ${packerName}, ${packerAddr}. Origin: ${origin || 'India'}`,
+          confidence: 0.95,
+          status: 'PASS',
+          isApplicable: true,
+          evidenceSource: `${packerName}, ${packerAddr}`
+        });
+      } else if (mfgName && mfgAddr && !hasMfgPin && !isIngredientAddress && /address|road|street|nagar|plot|phase|industrial|city/i.test(mfgAddr)) {
         checks.push({
           ruleId: id,
           ruleNo: rule.ruleNo,
@@ -425,17 +465,19 @@ export function evaluateLegalMetrologyRules(
           recommendedPenalty: 'Compounding notice under Rule 10(1) / Section 36(1). Compounding fee: ₹25,000.',
           reportedDate: new Date().toISOString().slice(0, 10)
         });
-      } else if (isLowConfidence) {
+      } else if (isLowConfidence || isIngredientAddress) {
         checks.push({
           ruleId: id,
           ruleNo: rule.ruleNo,
           subRule: rule.subRule,
           requirement: 'Name and complete address of manufacturer / packer / importer',
-          detectedInfo: 'Partial/blurred text detected in manufacturer region',
+          detectedInfo: isIngredientAddress
+            ? 'Manufacturer region partially obscured or overlapping formulation text'
+            : 'Partial/blurred text detected in manufacturer region',
           confidence: 0.55,
           status: 'NEEDS REVIEW',
           isApplicable: true,
-          reason: 'Text region detected but unreadable or partially obscured. Optical re-scan recommended.'
+          reason: 'Text region detected but unreadable or partially obscured. Optical confirmation recommended.'
         });
       } else {
         checks.push({
@@ -899,6 +941,29 @@ export function evaluateLegalMetrologyRules(
     }
   });
 
+  // Evidence-first violation validation (Section 24 & Master Prompt)
+  // 1. Reject any violation where evidence text overlaps ingredients or directions
+  // 2. Reject "Address Missing PIN" if marketer has valid PIN code
+  const validatedViolations = violations.filter((v) => {
+    const isPinVio = /Missing PIN/i.test(v.violationType);
+    if (isPinVio) {
+      if (
+        structuredData.marketer?.pin_code ||
+        (structuredData.marketer?.address && /\b[1-9][0-9]{5}\b/.test(structuredData.marketer.address)) ||
+        (structuredData.postal_pin && /\b[1-9][0-9]{5}\b/.test(structuredData.postal_pin))
+      ) {
+        return false;
+      }
+      if (v.detectedText && /(?:direction|apply\s*generously|apply\s*evenly|ingredients?|aqua|salicylic|octocrylene)/i.test(v.detectedText)) {
+        return false;
+      }
+      if (v.description && /(?:direction|ingredients?|composition)/i.test(v.description)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   // Calculate Summary Counts
   const passed = checks.filter((c) => c.status === 'PASS').length;
   const failed = checks.filter((c) => c.status === 'FAIL').length;
@@ -930,7 +995,7 @@ export function evaluateLegalMetrologyRules(
       total: checks.length
     },
     checks,
-    violations,
+    violations: validatedViolations,
     classification
   };
 }

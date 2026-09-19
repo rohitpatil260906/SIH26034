@@ -17,7 +17,8 @@ from .models import (
     LabelMeAnnotation,
     MeasurementValidation,
     BenchmarkEvaluationResponse,
-    SystemDiagnosticStatus
+    SystemDiagnosticStatus,
+    LmCompassResult
 )
 from .services.cv_pipeline import (
     decode_base64_image,
@@ -37,7 +38,7 @@ from .services.ocr_engine import (
     TESSERACT_AVAILABLE,
     get_easyocr_reader
 )
-from .services.text_processor import process_and_classify_text
+from .services.text_processor import process_and_classify_text, build_lm_compass_dossier
 from .services.rule_engine import (
     evaluate_legal_metrology_rules,
     load_statutory_rules_library
@@ -277,6 +278,17 @@ def process_scan(request: ScanProcessRequest):
         surfaces_processed=surfaces_processed
     )
 
+    # ----------------------------------------------------
+    # STAGE 3.11: LM-COMPASS STRUCTURED COMPLIANCE DOSSIER
+    # ----------------------------------------------------
+    lm_compass = build_lm_compass_dossier(
+        product_data,
+        canonical_fields,
+        evidence_map,
+        compliance_checks,
+        surfaces_processed
+    )
+
     # External Verification Abstraction
     ext_verif = "External verification: Not available"
 
@@ -295,6 +307,7 @@ def process_scan(request: ScanProcessRequest):
         measurement_validation=measurement_val,
         labelme_annotation=labelme_ann,
         external_verification=ext_verif,
+        lm_compass_result=lm_compass,
         timestamp=datetime.utcnow().isoformat()
     )
 
@@ -364,6 +377,17 @@ def process_scan(request: ScanProcessRequest):
         print(f"Database write note: {db_err}")
 
     return response
+
+@app.post("/api/scan/lm-compass", response_model=LmCompassResult)
+async def scan_lm_compass(request: ScanProcessRequest):
+    """LM-COMPASS: Universal Packaged Commodity Compliance Vision Engine
+    Executes product-adaptive CV + OCR + semantic understanding + compliance validation
+    and returns the Section 27 Structured Compliance Dossier.
+    """
+    res = await process_scan(request)
+    if not res.lm_compass_result:
+        raise HTTPException(status_code=500, detail="Failed to synthesize LM-Compass compliance dossier")
+    return res.lm_compass_result
 
 @app.get("/api/scan/{scan_id}", response_model=ScanProcessResponse)
 def get_scan(scan_id: str):

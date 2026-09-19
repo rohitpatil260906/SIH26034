@@ -653,6 +653,58 @@ export function classifyAndAuditLine(
 ): ExtractedLabelLine {
   const lower = lineText.toLowerCase();
 
+  // 0a. Directions of Use -> Rule 4 / Rule 9 (Informational)
+  if (/(?:direction(?:s)?\s*(?:for|of)?\s*use|how\s*to\s*use|apply\s*(?:generously|evenly|liberally)|dosage|usage\s*instructions)/i.test(lineText)) {
+    return {
+      lineNumber,
+      text: lineText,
+      confidence,
+      matchedRule: 'Rule 4 / Rule 9 — Directions for Use',
+      category: 'Usage & Directions',
+      status: 'Informational',
+      finding: 'Directions of use / application instructions.'
+    };
+  }
+
+  // 0b. Formulation / Ingredients -> Rule 4 / Rule 9 (Informational)
+  if (/(?:ingredients?|composition|active\s*ingredients?|contains\s*:|aqua\b|glycerin|salicylic|titanium|zinc\s*oxide|octocrylene|phenoxyethanol|ethylhexyl|paraben|fragrance|parfum)/i.test(lineText)) {
+    return {
+      lineNumber,
+      text: lineText,
+      confidence,
+      matchedRule: 'Rule 4 / Rule 9 — Formulation / Ingredient Declaration',
+      category: 'Composition & Ingredients',
+      status: 'Informational',
+      finding: 'Ingredient / chemical composition disclosure.'
+    };
+  }
+
+  // 0c. Statutory Warning / Caution
+  if (/(?:warning|caution|for\s*external\s*use\s*only|keep\s*out\s*of\s*reach|avoid\s*contact\s*with\s*eyes|patch\s*test)/i.test(lineText)) {
+    return {
+      lineNumber,
+      text: lineText,
+      confidence,
+      matchedRule: 'Rule 4 / Rule 9 — Statutory Warning',
+      category: 'Safety & Warnings',
+      status: 'Informational',
+      finding: 'Safety warning or advisory text.'
+    };
+  }
+
+  // 0d. Marketer Identity -> Rule 6(1)(a)
+  if (/(?:marketed\s*(?:by|at)?|mkt\s*by|marketed\s*&\s*distributed\s*by|मार्क\s*बाय)/i.test(lineText)) {
+    return {
+      lineNumber,
+      text: lineText,
+      confidence,
+      matchedRule: 'Rule 6(1)(a) — Marketer Identification',
+      category: 'Commercial Entity',
+      status: 'Compliant',
+      finding: 'Commercial marketer identity declared under Rule 6(1)(a).'
+    };
+  }
+
   // 1. MRP / Retail Price -> Rule 6(1)(e) & Rule 18
   if (/mrp|m\.?r\.?p\.?|max(?:imum)?\s*retail\s*price|₹|rs\.?\s*\d+|\b\d+\/-\b/i.test(lineText)) {
     const hasTax = /inclusive\s*of\s*all\s*taxes|incl\.?\s*of\s*all\s*taxes|incl\.?\s*taxes/i.test(lower);
@@ -755,7 +807,8 @@ export function classifyAndAuditLine(
   }
 
   // 6. Manufacturer / Packer Name & Postal Address -> Rule 6(1)(a) & Rule 10
-  if (/mfg|manufactured\s*by|packed\s*by|marketed\s*by|imported\s*by|pvt\.?\s*ltd|mills|laboratories|factory/i.test(lineText)) {
+  if (/(?:mfd\.?\s*(?:by|at)?|mfg\.?\s*(?:by|at)?|manufactured\s*(?:by|at)?|packed\s*(?:by|at)?|pkd\.?\s*(?:by|at)?|imported\s*(?:by|at)?|विनिर्माता|पैकर)/i.test(lineText) ||
+      (/\b(?:pvt\.?\s*ltd|mills|laboratories|factory)\b/i.test(lineText) && !/(?:aqua|glycerin|salicylic|octocrylene|phenoxyethanol|apply\s*evenly|direction)/i.test(lineText))) {
     const hasPin = /\b([1-9][0-9]{5})\b/.test(lineText);
     if (!hasPin && /address|road|street|nagar|plot|phase|industrial/i.test(lower)) {
       return {
@@ -896,7 +949,10 @@ export function parseLabelAndCheckLegalMetrology(
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.length > 2 && !/mrp|mfd|exp|batch|net|rs\b|₹|lic|care|pvt|ltd|regd|fssai/i.test(trimmed)) {
+    if (
+      trimmed.length > 2 &&
+      !/mrp|mfd|exp|batch|net|rs\b|₹|lic|care|pvt|ltd|regd|fssai|direction|how\s*to\s*use|apply|ingredient|composition|aqua|salicylic|warning|caution|marketed/i.test(trimmed)
+    ) {
       if (!brandTitle) {
         brandTitle = trimmed.slice(0, 45);
       } else if (!genericName && trimmed !== brandTitle) {
@@ -1230,65 +1286,194 @@ export function parseLabelAndCheckLegalMetrology(
     });
   }
 
-  // 6. Manufacturer / Packer Name & Address (Rule 6(1)(a) & Rule 10)
-  // 6. Manufacturer / Packer Name & Address (Rule 6(1)(a) & Rule 10)
-  const mfgIdx = lines.findIndex(l => /mfg|manufactured|marketed|packed|imported|lic|pvt|ltd|mills|care|laboratories|विनिर्माता|पैकर/i.test(l));
-  let mfgLine = mfgIdx !== -1 ? lines[mfgIdx] : '';
+  // 6. Manufacturer / Packer / Marketer Name & Address (Rule 6(1)(a) & Rule 10)
+  const isIngredientOrDirection = (l: string) =>
+    /(?:direction|how\s*to\s*use|apply\s*generously|apply\s*evenly|dosage|usage|ingredients?|composition|active\s*ingredients?|aqua|salicylic|glycerin|octocrylene|titanium|phenoxyethanol|warning|caution|for\s*external)/i.test(l);
+
+  // Preserve semantic regions
+  const directionLines = lines.filter(l => /(?:direction|how\s*to\s*use|apply\s*generously|apply\s*evenly|dosage|usage)/i.test(l));
+  const directionsText = directionLines.join('; ');
+
+  const ingredientLines = lines.filter(l => /(?:ingredients?|composition|active\s*ingredients?|aqua|salicylic|octocrylene|titanium|zinc\s*oxide|glycerin|phenoxyethanol)/i.test(l));
+  const ingredientsText = ingredientLines.join('; ');
+
+  const warningLines = lines.filter(l => /(?:warning|caution|for\s*external\s*use|keep\s*out|patch\s*test)/i.test(l));
+  const warningsText = warningLines.join('; ');
+
+  // Detect separate commercial entities
+  const mfgIdx = lines.findIndex(l => !isIngredientOrDirection(l) && /(?:mfd\.?\s*(?:by|at)?|mfg\.?\s*(?:by|at)?|manufactured\s*(?:by|at)?|विनिर्माता)/i.test(l));
+  const packerIdx = lines.findIndex(l => !isIngredientOrDirection(l) && /(?:packed\s*(?:by|at)?|pkd\.?\s*(?:by|at)?|पैकर)/i.test(l));
+  const importerIdx = lines.findIndex(l => !isIngredientOrDirection(l) && /(?:imported\s*(?:by|at)?|आयातक)/i.test(l));
+  const marketerIdx = lines.findIndex(l => !isIngredientOrDirection(l) && /(?:marketed\s*(?:by|at)?|mkt\s*by|marketed\s*&\s*distributed\s*by|मार्क\s*बाय)/i.test(l));
+
   let mfgName = '';
   let mfgAddress = '';
-
-  if (mfgLine) {
-    const strippedPrefix = mfgLine.replace(/^(?:mfd\.?\s*(?:by|at)?|mfg\.?\s*(?:by|at)?|manufactured\s*(?:by|at)?|packed\s*(?:by|at)?|marketed\s*by|imported\s*by)\s*[:.\-\s]*/i, '').trim();
-    if (strippedPrefix.length >= 3 && !/plot|sector|road|phase|industrial/i.test(strippedPrefix)) {
-      mfgName = strippedPrefix.split(',')[0].trim();
-      mfgAddress = strippedPrefix;
-    } else if (mfgIdx + 1 < lines.length) {
+  if (mfgIdx !== -1) {
+    const stripped = lines[mfgIdx].replace(/^(?:mfd\.?\s*(?:by|at)?|mfg\.?\s*(?:by|at)?|manufactured\s*(?:by|at)?)\s*[:.\-\s]*/i, '').trim();
+    if (stripped.length >= 3 && !/plot|sector|road|phase|industrial/i.test(stripped)) {
+      mfgName = stripped.split(',')[0].trim();
+      mfgAddress = stripped;
+    } else if (mfgIdx + 1 < lines.length && !isIngredientOrDirection(lines[mfgIdx + 1])) {
       mfgName = lines[mfgIdx + 1].split(',')[0].trim();
-      mfgAddress = lines.slice(mfgIdx + 1, mfgIdx + 4).join(', ');
+      mfgAddress = lines.slice(mfgIdx + 1, mfgIdx + 4).filter(l => !isIngredientOrDirection(l)).join(', ');
     }
   }
 
-  if (!mfgAddress && lines.length > 2) {
-    mfgAddress = lines.slice(1, 4).join(', ');
-    mfgName = lines[1].split(',')[0].trim();
+  let marketerName = '';
+  let marketerAddress = '';
+  if (marketerIdx !== -1) {
+    const stripped = lines[marketerIdx].replace(/^(?:marketed\s*(?:by|at)?|mkt\s*by|marketed\s*&\s*distributed\s*by)\s*[:.\-\s]*/i, '').trim();
+    if (stripped.length >= 3 && !/plot|sector|road|phase|industrial/i.test(stripped)) {
+      marketerName = stripped.split(',')[0].trim();
+      marketerAddress = stripped;
+    } else if (marketerIdx + 1 < lines.length && !isIngredientOrDirection(lines[marketerIdx + 1])) {
+      marketerName = lines[marketerIdx + 1].split(',')[0].trim();
+      marketerAddress = lines.slice(marketerIdx + 1, marketerIdx + 4).filter(l => !isIngredientOrDirection(l)).join(', ');
+    }
   }
 
+  let packerName = '';
+  let packerAddress = '';
+  if (packerIdx !== -1) {
+    const stripped = lines[packerIdx].replace(/^(?:packed\s*(?:by|at)?|pkd\.?\s*(?:by|at)?)\s*[:.\-\s]*/i, '').trim();
+    if (stripped.length >= 3 && !/plot|sector|road|phase|industrial/i.test(stripped)) {
+      packerName = stripped.split(',')[0].trim();
+      packerAddress = stripped;
+    } else if (packerIdx + 1 < lines.length && !isIngredientOrDirection(lines[packerIdx + 1])) {
+      packerName = lines[packerIdx + 1].split(',')[0].trim();
+      packerAddress = lines.slice(packerIdx + 1, packerIdx + 4).filter(l => !isIngredientOrDirection(l)).join(', ');
+    }
+  }
+
+  let importerName = '';
+  let importerAddress = '';
+  if (importerIdx !== -1) {
+    const stripped = lines[importerIdx].replace(/^(?:imported\s*(?:by|at)?)\s*[:.\-\s]*/i, '').trim();
+    if (stripped.length >= 3 && !/plot|sector|road|phase|industrial/i.test(stripped)) {
+      importerName = stripped.split(',')[0].trim();
+      importerAddress = stripped;
+    } else if (importerIdx + 1 < lines.length && !isIngredientOrDirection(lines[importerIdx + 1])) {
+      importerName = lines[importerIdx + 1].split(',')[0].trim();
+      importerAddress = lines.slice(importerIdx + 1, importerIdx + 4).filter(l => !isIngredientOrDirection(l)).join(', ');
+    }
+  }
+
+  // Fallback entity if corporate entity pattern is present and not ingredient/direction
+  if (!mfgName && !marketerName && !packerName && !importerName) {
+    const corpIdx = lines.findIndex(l => !isIngredientOrDirection(l) && /\b(?:pvt\.?\s*ltd|enterprises|laboratories|industries)\b/i.test(l));
+    if (corpIdx !== -1) {
+      mfgName = lines[corpIdx].trim();
+      if (corpIdx + 1 < lines.length && !isIngredientOrDirection(lines[corpIdx + 1])) {
+        mfgAddress = lines.slice(corpIdx + 1, corpIdx + 3).filter(l => !isIngredientOrDirection(l)).join(', ');
+      }
+    }
+  }
+
+  // Extract postal PIN code
   const pinMatch = text.match(/\b([1-9][0-9]{5})\b/);
-  if (pinMatch && !mfgAddress.includes(pinMatch[1])) {
-    mfgAddress += ` (PIN: ${pinMatch[1]})`;
+  const detectedPin = pinMatch ? pinMatch[1] : undefined;
+
+  // Calculate dynamic bounding box y position
+  const targetEntityIdx = mfgIdx !== -1 ? mfgIdx : (marketerIdx !== -1 ? marketerIdx : (packerIdx !== -1 ? packerIdx : -1));
+  const entityY = targetEntityIdx !== -1
+    ? Math.max(10, Math.min(85, Math.round((targetEntityIdx / Math.max(1, lines.length)) * 100)))
+    : 30;
+
+  if (mfgAddress && detectedPin && !mfgAddress.includes(detectedPin)) {
+    mfgAddress += ` (PIN: ${detectedPin})`;
+  }
+  if (marketerAddress && detectedPin && !marketerAddress.includes(detectedPin)) {
+    marketerAddress += ` (PIN: ${detectedPin})`;
   }
 
-  const hasPinCode = !!pinMatch;
-  declarations.push({
-    id: `DEC-MFG-${timestamp}-6`,
-    declarationType: 'Manufacturer Name & Address',
-    extractedValue: mfgAddress.slice(0, 140) || 'Not detected',
-    expectedRequirement: 'Complete name & geographical address with postal PIN code under Rule 6(1)(a) and Rule 10',
-    ruleReference: 'Rule 6(1)(a) & Rule 10',
-    surface,
-    status: (mfgAddress && hasPinCode) ? 'Found' : (mfgAddress ? 'Defective' : 'Under Review'),
-    confidence: mfgAddress ? 'High' : 'Low',
-    confidenceScore: mfgAddress ? 0.93 : 0.45,
-    officerStatus: (mfgAddress && hasPinCode) ? 'Verified' : 'Flagged',
-    correctionNotes: hasPinCode ? undefined : 'Manufacturer address is missing mandatory 6-digit Indian postal PIN code.',
-    boundingBox: { x: 10, y: 28, width: 80, height: 16, label: `Manufacturer: ${mfgName || mfgAddress.slice(0, 24)}` }
-  });
+  const hasMfgPin = !!(mfgAddress && /\b[1-9][0-9]{5}\b/.test(mfgAddress));
+  const hasMarketerPin = !!(marketerAddress && /\b[1-9][0-9]{5}\b/.test(marketerAddress));
 
-  if (!hasPinCode && mfgAddress) {
-    violations.push({
-      id: `VIO-${timestamp}-04`,
-      violationType: 'Incomplete Manufacturer Postal Address (Missing PIN Code)',
-      ruleReference: 'Rule 6(1)(a) read with Rule 10',
-      statutoryActClause: 'Rule 6(1)(a) & Rule 10 read with Section 36(1)',
-      product: brandTitle,
+  if (mfgName || mfgAddress) {
+    declarations.push({
+      id: `DEC-MFG-${timestamp}-6`,
+      declarationType: 'Manufacturer Name & Address',
+      extractedValue: mfgAddress.slice(0, 140) || mfgName || 'Not detected',
+      expectedRequirement: 'Complete name & geographical address with postal PIN code under Rule 6(1)(a) and Rule 10',
+      ruleReference: 'Rule 6(1)(a) & Rule 10',
       surface,
-      description: 'Manufacturer / Packer address declared without mandatory 6-digit postal PIN code.',
-      severity: 'Medium',
-      officerStatus: 'Needs Review',
-      evidenceImage: '',
-      evidenceBoundingBox: { x: 10, y: 28, width: 80, height: 16, label: 'Address Missing PIN' },
-      recommendedPenalty: 'Direct manufacturer to furnish geographic facility verification under Rule 10(1) (Compounding fee up to ₹25,000).',
-      reportedDate: new Date().toISOString().slice(0, 10)
+      status: hasMfgPin ? 'Found' : (mfgAddress ? 'Defective' : 'Under Review'),
+      confidence: mfgAddress ? 'High' : 'Low',
+      confidenceScore: mfgAddress ? 0.93 : 0.45,
+      officerStatus: hasMfgPin ? 'Verified' : 'Flagged',
+      correctionNotes: hasMfgPin ? undefined : 'Manufacturer address is missing mandatory 6-digit Indian postal PIN code.',
+      boundingBox: { x: 10, y: entityY, width: 80, height: 14, label: `Manufacturer: ${mfgName || mfgAddress.slice(0, 24)}` }
+    });
+
+    if (!hasMfgPin && mfgAddress && /address|road|street|nagar|plot|phase|industrial|city|lane/i.test(mfgAddress)) {
+      violations.push({
+        id: `VIO-${timestamp}-04`,
+        violationType: 'Incomplete Manufacturer Postal Address (Missing PIN Code)',
+        ruleReference: 'Rule 6(1)(a) read with Rule 10',
+        statutoryActClause: 'Rule 6(1)(a) & Rule 10 read with Section 36(1)',
+        product: brandTitle,
+        surface,
+        description: 'Manufacturer address declared without mandatory 6-digit postal PIN code.',
+        severity: 'Medium',
+        officerStatus: 'Needs Review',
+        evidenceImage: '',
+        evidenceBoundingBox: { x: 10, y: entityY, width: 80, height: 14, label: 'Address Missing PIN' },
+        recommendedPenalty: 'Direct manufacturer to furnish geographic facility verification under Rule 10(1) (Compounding fee up to ₹25,000).',
+        reportedDate: new Date().toISOString().slice(0, 10)
+      });
+    }
+  } else if (marketerName || marketerAddress) {
+    // SECTION 24 CRITICAL FIX:
+    // Marketer address with PIN is NOT an "Address Missing PIN" violation!
+    declarations.push({
+      id: `DEC-MFG-${timestamp}-6`,
+      declarationType: 'Manufacturer / Marketer Name & Address',
+      extractedValue: `Marketed by: ${marketerName || marketerAddress}`.slice(0, 140),
+      expectedRequirement: 'Complete name & geographical address with postal PIN code under Rule 6(1)(a) and Rule 10',
+      ruleReference: 'Rule 6(1)(a) & Rule 10',
+      surface,
+      status: 'Under Review',
+      confidence: 'High',
+      confidenceScore: 0.92,
+      officerStatus: 'Pending',
+      correctionNotes: hasMarketerPin
+        ? `Marketed by address present with PIN (${detectedPin || 'declared'}); verify if separate manufacturer declaration is required under Rule 6(1)(a) or if marketer qualifies under proviso.`
+        : 'Marketer address declared without postal PIN code.',
+      boundingBox: { x: 10, y: entityY, width: 80, height: 14, label: `Marketer: ${marketerName || marketerAddress.slice(0, 24)}` }
+    });
+
+    if (!hasMarketerPin && marketerAddress && /address|road|street|nagar|plot|phase|industrial/i.test(marketerAddress)) {
+      violations.push({
+        id: `VIO-${timestamp}-04`,
+        violationType: 'Incomplete Manufacturer Postal Address (Missing PIN Code)',
+        ruleReference: 'Rule 6(1)(a) read with Rule 10',
+        statutoryActClause: 'Rule 6(1)(a) & Rule 10 read with Section 36(1)',
+        product: brandTitle,
+        surface,
+        description: 'Marketer address declared without mandatory 6-digit postal PIN code.',
+        severity: 'Medium',
+        officerStatus: 'Needs Review',
+        evidenceImage: '',
+        evidenceBoundingBox: { x: 10, y: entityY, width: 80, height: 14, label: 'Address Missing PIN' },
+        recommendedPenalty: 'Direct packaging correction under Rule 10(1) (Compounding fee up to ₹25,000).',
+        reportedDate: new Date().toISOString().slice(0, 10)
+      });
+    }
+  } else {
+    // No manufacturer or marketer line identified
+    declarations.push({
+      id: `DEC-MFG-${timestamp}-6`,
+      declarationType: 'Manufacturer Name & Address',
+      extractedValue: 'Not detected on current surface',
+      expectedRequirement: 'Complete name & geographical address with postal PIN code under Rule 6(1)(a) and Rule 10',
+      ruleReference: 'Rule 6(1)(a) & Rule 10',
+      surface,
+      status: 'Under Review',
+      confidence: 'Low',
+      confidenceScore: 0.45,
+      officerStatus: 'Pending',
+      correctionNotes: 'Manufacturer / Packer declaration not detected on this surface. Check alternate surfaces.',
+      boundingBox: { x: 10, y: 30, width: 80, height: 14, label: 'Manufacturer Unidentified' }
     });
   }
 
@@ -1400,20 +1585,33 @@ export function parseLabelAndCheckLegalMetrology(
     manufacturer: {
       name: mfgName || 'Manufacturer Identified',
       address: mfgAddress || 'Address on label',
-      pin_code: pinMatch ? pinMatch[1] : undefined
+      pin_code: mfgAddress && detectedPin ? detectedPin : undefined
     },
     manufacturer_name: mfgName || undefined,
     manufacturer_address: mfgAddress || undefined,
     packer: {
-      name: mfgName || '',
-      address: mfgAddress || ''
+      name: packerName || mfgName || '',
+      address: packerAddress || mfgAddress || ''
     },
-    packer_name: mfgName || undefined,
-    packer_address: mfgAddress || undefined,
+    packer_name: packerName || mfgName || undefined,
+    packer_address: packerAddress || mfgAddress || undefined,
     importer: {
-      name: '',
-      address: ''
+      name: importerName || '',
+      address: importerAddress || ''
     },
+    importer_name: importerName || undefined,
+    importer_address: importerAddress || undefined,
+    marketer: marketerName ? {
+      name: marketerName,
+      address: marketerAddress || '',
+      pin_code: marketerAddress && detectedPin ? detectedPin : undefined
+    } : undefined,
+    marketer_name: marketerName || undefined,
+    marketer_address: marketerAddress || undefined,
+    directions_text: directionsText || undefined,
+    ingredients_text: ingredientsText || undefined,
+    warnings_text: warningsText || undefined,
+    postal_pin: detectedPin || undefined,
     net_quantity: netQtyDisplay || (netQty ? `${netQty.numeric} ${netQty.unit}` : ''),
     units: netQty?.unit || 'g',
     mrp: mrp ? mrp.displayValue : '',
@@ -1427,11 +1625,11 @@ export function parseLabelAndCheckLegalMetrology(
     consumer_care: {
       phone: phoneMatch ? phoneMatch[0] : '',
       email: emailMatch ? emailMatch[0] : '',
-      address: mfgAddress
+      address: mfgAddress || marketerAddress || ''
     },
     consumer_care_phone: phoneMatch ? phoneMatch[0] : undefined,
     consumer_care_email: emailMatch ? emailMatch[0] : undefined,
-    consumer_care_address: mfgAddress || undefined,
+    consumer_care_address: mfgAddress || marketerAddress || undefined,
     country_of_origin: countryOfOrigin,
     other_declarations: lines.filter(l => /lic|fssai|regn|veg|green|dot/i.test(l)).slice(0, 5)
   };
@@ -1442,7 +1640,9 @@ export function parseLabelAndCheckLegalMetrology(
     { field: 'generic_name', label: 'Generic Commodity Name', value: genericName, confidence: 0.94, source: genericName, status: 'Detected', surface },
     { field: 'category', label: 'Category', value: 'Packaged Commodity', confidence: 0.92, source: genericName, status: 'Detected', surface },
     { field: 'manufacturer_name', label: 'Manufacturer Name', value: mfgName || 'Not Detected', confidence: mfgName ? 0.94 : 0.5, source: mfgAddress, status: mfgName ? 'Detected' : 'Missing', surface },
-    { field: 'manufacturer_address', label: 'Manufacturer Address', value: mfgAddress || 'Not Detected', confidence: hasPinCode ? 0.94 : 0.65, source: mfgAddress, status: (mfgAddress && hasPinCode) ? 'Detected' : (mfgAddress ? 'Defective' : 'Not Detected'), surface },
+    { field: 'manufacturer_address', label: 'Manufacturer Address', value: mfgAddress || 'Not Detected', confidence: hasMfgPin ? 0.94 : 0.65, source: mfgAddress, status: (mfgAddress && hasMfgPin) ? 'Detected' : (mfgAddress ? 'Defective' : 'Not Detected'), surface },
+    { field: 'marketer_name', label: 'Marketer Name', value: marketerName || 'Not Declared', confidence: marketerName ? 0.94 : 0.5, source: marketerAddress, status: marketerName ? 'Detected' : 'Not Detected', surface },
+    { field: 'marketer_address', label: 'Marketer Address', value: marketerAddress || 'Not Declared', confidence: hasMarketerPin ? 0.94 : 0.65, source: marketerAddress, status: (marketerAddress && hasMarketerPin) ? 'Detected' : (marketerAddress ? 'Defective' : 'Not Detected'), surface },
     { field: 'country_of_origin', label: 'Country of Origin', value: countryOfOrigin, confidence: 0.95, source: countryOfOrigin, status: 'Detected', surface },
     { field: 'net_quantity', label: 'Net Quantity', value: structuredData.net_quantity || 'Not Detected', confidence: netQty ? 0.96 : 0.5, source: netQty?.rawMatch || '', status: netQty ? 'Detected' : 'Missing', surface },
     { field: 'units', label: 'Unit Symbol', value: structuredData.units || 'g', confidence: 0.95, source: netQty?.unit || '', status: 'Detected', surface },

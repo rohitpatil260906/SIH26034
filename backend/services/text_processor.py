@@ -15,7 +15,17 @@ from ..models import (
     Table1HeightCheck,
     BoundingBox,
     FieldEvidence,
-    ProductClassification
+    ProductClassification,
+    ProductCategory,
+    SemanticRegionType,
+    UniversalFieldStatus,
+    UniversalComplianceStatus,
+    LmCompassFieldItem,
+    LmCompassComplianceItem,
+    LmCompassViolationItem,
+    LmCompassNeedsReviewItem,
+    LmCompassResult,
+    ComplianceCheckItem
 )
 
 # -------------------------------------------------------------------
@@ -54,11 +64,11 @@ NET_QTY_PATTERNS = [
 ]
 
 MFD_PATTERNS = [
-    re.compile(r'(?:Mfd|Mfg|Date\s*of\s*(?:Mfg|Mfd|Manufacture|Manufacturing)|Manufactured|उत्पादन\s*तिथि)\s*[:.\-\s]*((?:[0-9]{1,2}[\/\-\.])?[0-9]{1,2}[\/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[\'\-]?[0-9]{2,4})', re.I)
+    re.compile(r'(?:Mfd(?:\s*Date)?|Mfg(?:\s*Date)?|Date\s*of\s*(?:Mfg|Mfd|Manufacture|Manufacturing)|Manufactured(?:\s*Date)?|उत्पादन\s*तिथि)\s*[:.\-\s]*((?:[0-9]{1,2}[\/\-\.])?[0-9]{1,2}[\/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[\'\-]?[0-9]{2,4})', re.I)
 ]
 
 PKD_PATTERNS = [
-    re.compile(r'(?:Packed|Pkd|Date\s*of\s*Packing|पैकिंग\s*तिथि)\s*[:.\-\s]*((?:[0-9]{1,2}[\/\-\.])?[0-9]{1,2}[\/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[\'\-]?[0-9]{2,4})', re.I)
+    re.compile(r'(?:Packed(?:\s*Date)?|Pkd(?:\s*Date)?|Date\s*of\s*Packing|पैकिंग\s*तिथि)\s*[:.\-\s]*((?:[0-9]{1,2}[\/\-\.])?[0-9]{1,2}[\/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[\'\-]?[0-9]{2,4})', re.I)
 ]
 
 EXP_PATTERNS = [
@@ -88,77 +98,354 @@ ADDRESS_CUES = re.compile(
     re.I
 )
 
-# Standard commodity dictionary for generic name resolution and category mapping
+# Standard commodity dictionary for generic name resolution and category mapping across Categories A through R
 COMMODITY_KEYWORDS = {
-    # Food & Beverage
-    "tea": ("Tea", "Food & Beverage"),
-    "coffee": ("Coffee", "Food & Beverage"),
-    "biscuit": ("Biscuits", "Food & Beverage"),
-    "biscuits": ("Biscuits", "Food & Beverage"),
-    "cookies": ("Cookies", "Food & Beverage"),
-    "atta": ("Wheat Flour (Atta)", "Food & Beverage"),
-    "flour": ("Flour", "Food & Beverage"),
-    "rice": ("Rice", "Food & Beverage"),
-    "sugar": ("Sugar", "Food & Beverage"),
-    "salt": ("Edible Common Salt", "Food & Beverage"),
-    "spices": ("Spices", "Food & Beverage"),
-    "masala": ("Spice Blend (Masala)", "Food & Beverage"),
-    "edible oil": ("Edible Vegetable Oil", "Food & Beverage"),
-    "mustard oil": ("Mustard Oil", "Food & Beverage"),
-    "sunflower oil": ("Sunflower Oil", "Food & Beverage"),
-    "soyabean oil": ("Soyabean Oil", "Food & Beverage"),
-    "ghee": ("Ghee", "Food & Beverage"),
-    "butter": ("Butter", "Food & Beverage"),
-    "chips": ("Potato Chips", "Food & Beverage"),
-    "namkeen": ("Namkeen / Savouries", "Food & Beverage"),
-    "chocolate": ("Chocolate", "Food & Beverage"),
-    "juice": ("Fruit Juice", "Food & Beverage"),
-    "noodles": ("Instant Noodles", "Food & Beverage"),
-    "pasta": ("Pasta", "Food & Beverage"),
-    # Personal Care & Cosmetics
-    "soap": ("Toilet Soap", "Cosmetics & Personal Care"),
-    "shampoo": ("Hair Shampoo", "Cosmetics & Personal Care"),
-    "conditioner": ("Hair Conditioner", "Cosmetics & Personal Care"),
-    "body wash": ("Body Wash", "Cosmetics & Personal Care"),
-    "face wash": ("Facial Cleanser / Face Wash", "Cosmetics & Personal Care"),
-    "cream": ("Skin Cream", "Cosmetics & Personal Care"),
-    "lotion": ("Body Lotion", "Cosmetics & Personal Care"),
-    "sunscreen": ("Sunscreen Lotion / Gel", "Cosmetics & Personal Care"),
-    "moisturizer": ("Moisturizer", "Cosmetics & Personal Care"),
-    "hair oil": ("Hair Oil", "Cosmetics & Personal Care"),
-    "toothpaste": ("Toothpaste", "Cosmetics & Personal Care"),
-    "deodorant": ("Deodorant", "Cosmetics & Personal Care"),
-    # Garments & Apparel
-    "shirt": ("Readymade Garment (Shirt)", "Garments & Apparel"),
-    "t-shirt": ("Readymade Garment (T-Shirt)", "Garments & Apparel"),
-    "trousers": ("Readymade Garment (Trousers)", "Garments & Apparel"),
-    "pants": ("Readymade Garment (Pants)", "Garments & Apparel"),
-    "jeans": ("Readymade Garment (Jeans)", "Garments & Apparel"),
-    "kurta": ("Readymade Garment (Kurta)", "Garments & Apparel"),
-    "hosiery": ("Hosiery Product", "Garments & Apparel"),
-    "socks": ("Hosiery (Socks)", "Garments & Apparel"),
-    "garment": ("Readymade Garment", "Garments & Apparel"),
-    # Cleaning & Household
-    "detergent": ("Detergent Powder", "Cleaning & Household"),
-    "detergent bar": ("Detergent Bar", "Cleaning & Household"),
-    "dishwash": ("Dishwashing Liquid", "Cleaning & Household"),
-    # Electronics
-    "earphones": ("Earphones", "Electronics & Electricals"),
-    "headphones": ("Headphones", "Electronics & Electricals"),
-    "charger": ("Mobile Charger", "Electronics & Electricals"),
-    "cable": ("Data Cable", "Electronics & Electricals"),
-    "battery": ("Battery", "Electronics & Electricals"),
-    "bulb": ("LED Bulb", "Electronics & Electricals"),
-    "mobile phone": ("Mobile Phone", "Electronics & Electricals"),
-    # Medical Devices
-    "bandage": ("Adhesive Bandage", "Medical Devices"),
-    "mask": ("Face Mask", "Medical Devices"),
-    "cotton": ("Absorbent Cotton", "Medical Devices"),
-    "sanitizer": ("Hand Sanitizer", "Medical Devices"),
-    # Pan Masala
-    "pan masala": ("Pan Masala", "Pan Masala & Tobacco"),
-    "supari": ("Betel Nut / Supari", "Pan Masala & Tobacco")
+    # Category A: Food and Beverage
+    "tea": ("Tea", ProductCategory.FOOD_BEVERAGE),
+    "coffee": ("Coffee", ProductCategory.FOOD_BEVERAGE),
+    "biscuit": ("Biscuits", ProductCategory.FOOD_BEVERAGE),
+    "biscuits": ("Biscuits", ProductCategory.FOOD_BEVERAGE),
+    "cookies": ("Cookies", ProductCategory.FOOD_BEVERAGE),
+    "atta": ("Wheat Flour (Atta)", ProductCategory.FOOD_BEVERAGE),
+    "flour": ("Flour", ProductCategory.FOOD_BEVERAGE),
+    "rice": ("Rice", ProductCategory.FOOD_BEVERAGE),
+    "sugar": ("Sugar", ProductCategory.FOOD_BEVERAGE),
+    "salt": ("Edible Common Salt", ProductCategory.FOOD_BEVERAGE),
+    "spices": ("Spices", ProductCategory.FOOD_BEVERAGE),
+    "masala": ("Spice Blend (Masala)", ProductCategory.FOOD_BEVERAGE),
+    "edible oil": ("Edible Vegetable Oil", ProductCategory.FOOD_BEVERAGE),
+    "mustard oil": ("Mustard Oil", ProductCategory.FOOD_BEVERAGE),
+    "sunflower oil": ("Sunflower Oil", ProductCategory.FOOD_BEVERAGE),
+    "soyabean oil": ("Soyabean Oil", ProductCategory.FOOD_BEVERAGE),
+    "ghee": ("Ghee", ProductCategory.FOOD_BEVERAGE),
+    "butter": ("Butter", ProductCategory.FOOD_BEVERAGE),
+    "chips": ("Potato Chips", ProductCategory.FOOD_BEVERAGE),
+    "namkeen": ("Namkeen / Savouries", ProductCategory.FOOD_BEVERAGE),
+    "chocolate": ("Chocolate", ProductCategory.FOOD_BEVERAGE),
+    "juice": ("Fruit Juice", ProductCategory.FOOD_BEVERAGE),
+    "noodles": ("Instant Noodles", ProductCategory.FOOD_BEVERAGE),
+    "pasta": ("Pasta", ProductCategory.FOOD_BEVERAGE),
+    "milk": ("Packaged Milk", ProductCategory.FOOD_BEVERAGE),
+    "bread": ("Bread", ProductCategory.FOOD_BEVERAGE),
+    "cereal": ("Breakfast Cereal", ProductCategory.FOOD_BEVERAGE),
+    "pulses": ("Pulses / Dal", ProductCategory.FOOD_BEVERAGE),
+    "dal": ("Pulses / Dal", ProductCategory.FOOD_BEVERAGE),
+    "soft drink": ("Carbonated Soft Drink", ProductCategory.FOOD_BEVERAGE),
+    "energy drink": ("Energy Drink", ProductCategory.FOOD_BEVERAGE),
+    "snack": ("Packaged Snack", ProductCategory.FOOD_BEVERAGE),
+    "water": ("Packaged Drinking Water", ProductCategory.FOOD_BEVERAGE),
+    "wafers": ("Wafers", ProductCategory.FOOD_BEVERAGE),
+
+    # Category B: Cosmetics and Personal Care
+    "shampoo": ("Hair Shampoo", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "conditioner": ("Hair Conditioner", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "face wash": ("Facial Cleanser / Face Wash", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "facial cleanser": ("Facial Cleanser", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "cream": ("Skin Cream", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "skin cream": ("Skin Cream", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "lotion": ("Body Lotion", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "body lotion": ("Body Lotion", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "sunscreen": ("Sunscreen Lotion / Gel", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "sunscreen lotion": ("Sunscreen Lotion", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "sunscreen gel": ("Sunscreen Gel", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "moisturizer": ("Moisturizer", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "hair oil": ("Hair Oil", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "hair serum": ("Hair Serum", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "hair gel": ("Hair Gel", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "toothpaste": ("Toothpaste", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "deodorant": ("Deodorant", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "perfume": ("Perfume / Eau de Parfum", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "body spray": ("Body Spray", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "lipstick": ("Lipstick", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "eyeliner": ("Eyeliner", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "foundation": ("Foundation Cream", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "kajal": ("Kajal", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "nail polish": ("Nail Polish", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "shaving cream": ("Shaving Cream", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "aftershave": ("Aftershave Lotion", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "facial scrub": ("Facial Scrub", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "face mask": ("Facial Mask", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "talcum powder": ("Talcum Powder", ProductCategory.COSMETICS_PERSONAL_CARE),
+    "hand cream": ("Hand Cream", ProductCategory.COSMETICS_PERSONAL_CARE),
+
+    # Category C: Household Cleaning Products
+    "detergent": ("Detergent Powder", ProductCategory.HOUSEHOLD_CLEANING),
+    "detergent powder": ("Detergent Powder", ProductCategory.HOUSEHOLD_CLEANING),
+    "detergent bar": ("Detergent Bar", ProductCategory.HOUSEHOLD_CLEANING),
+    "detergent liquid": ("Detergent Liquid", ProductCategory.HOUSEHOLD_CLEANING),
+    "dishwash": ("Dishwashing Liquid", ProductCategory.HOUSEHOLD_CLEANING),
+    "dishwashing liquid": ("Dishwashing Liquid", ProductCategory.HOUSEHOLD_CLEANING),
+    "dishwashing bar": ("Dishwashing Bar", ProductCategory.HOUSEHOLD_CLEANING),
+    "floor cleaner": ("Floor Cleaner", ProductCategory.HOUSEHOLD_CLEANING),
+    "toilet cleaner": ("Toilet Cleaner", ProductCategory.HOUSEHOLD_CLEANING),
+    "glass cleaner": ("Glass Cleaner", ProductCategory.HOUSEHOLD_CLEANING),
+    "surface disinfectant": ("Surface Disinfectant", ProductCategory.HOUSEHOLD_CLEANING),
+    "bleach": ("Bleaching Powder / Liquid", ProductCategory.HOUSEHOLD_CLEANING),
+    "fabric conditioner": ("Fabric Conditioner", ProductCategory.HOUSEHOLD_CLEANING),
+    "stain remover": ("Stain Remover", ProductCategory.HOUSEHOLD_CLEANING),
+    "cleaner": ("Household Cleaner", ProductCategory.HOUSEHOLD_CLEANING),
+
+    # Category D: Toiletries
+    "soap": ("Toilet Soap / Bathing Bar", ProductCategory.TOILETRIES),
+    "bath soap": ("Toilet Soap", ProductCategory.TOILETRIES),
+    "toilet soap": ("Toilet Soap", ProductCategory.TOILETRIES),
+    "beauty soap": ("Toilet Soap", ProductCategory.TOILETRIES),
+    "bathing bar": ("Bathing Bar", ProductCategory.TOILETRIES),
+    "hand wash": ("Liquid Hand Wash", ProductCategory.TOILETRIES),
+    "body wash": ("Body Wash", ProductCategory.TOILETRIES),
+    "sanitizer": ("Hand Sanitizer", ProductCategory.TOILETRIES),
+    "wet wipes": ("Cleansing Wet Wipes", ProductCategory.TOILETRIES),
+    "cotton buds": ("Cotton Buds", ProductCategory.TOILETRIES),
+    "shaving foam": ("Shaving Foam", ProductCategory.TOILETRIES),
+
+    # Category E: Health / Wellness Products
+    "supplement": ("Dietary Supplement", ProductCategory.HEALTH_WELLNESS),
+    "protein powder": ("Protein Powder", ProductCategory.HEALTH_WELLNESS),
+    "multivitamin": ("Multivitamin Tablets / Capsules", ProductCategory.HEALTH_WELLNESS),
+    "cough lozenges": ("Cough Lozenges", ProductCategory.HEALTH_WELLNESS),
+    "herbal extract": ("Herbal Extract", ProductCategory.HEALTH_WELLNESS),
+    "pain relief balm": ("Pain Relief Balm", ProductCategory.HEALTH_WELLNESS),
+    "balm": ("Pain Relief Balm", ProductCategory.HEALTH_WELLNESS),
+    "bandage": ("Adhesive Bandage", ProductCategory.HEALTH_WELLNESS),
+    "glucose powder": ("Glucose Powder", ProductCategory.HEALTH_WELLNESS),
+
+    # Category F: Packaged Household Goods
+    "aluminium foil": ("Aluminium Foil", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "cling film": ("Cling Film", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "garbage bags": ("Garbage Bags", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "tissue": ("Facial Tissues", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "paper napkins": ("Paper Napkins", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "matches": ("Safety Matches", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "mosquito coil": ("Mosquito Repellent Coil", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "air freshener": ("Air Freshener", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+    "candles": ("Wax Candles", ProductCategory.PACKAGED_HOUSEHOLD_GOODS),
+
+    # Category G: Electrical / Electronic Consumer Products
+    "mobile charger": ("Mobile Charger", ProductCategory.ELECTRONICS),
+    "charger": ("Mobile Charger", ProductCategory.ELECTRONICS),
+    "usb cable": ("USB Data Cable", ProductCategory.ELECTRONICS),
+    "cable": ("Data Cable", ProductCategory.ELECTRONICS),
+    "data cable": ("Data Cable", ProductCategory.ELECTRONICS),
+    "earphones": ("Earphones", ProductCategory.ELECTRONICS),
+    "headphones": ("Headphones", ProductCategory.ELECTRONICS),
+    "power bank": ("Power Bank", ProductCategory.ELECTRONICS),
+    "battery": ("Dry Cell Battery", ProductCategory.ELECTRONICS),
+    "led bulb": ("LED Bulb", ProductCategory.ELECTRONICS),
+    "bulb": ("LED Bulb", ProductCategory.ELECTRONICS),
+    "mobile phone": ("Mobile Phone", ProductCategory.ELECTRONICS),
+    "adapter": ("Power Adapter", ProductCategory.ELECTRONICS),
+    "mouse": ("Computer Mouse", ProductCategory.ELECTRONICS),
+    "keyboard": ("Computer Keyboard", ProductCategory.ELECTRONICS),
+    "speaker": ("Bluetooth Speaker", ProductCategory.ELECTRONICS),
+    "torch": ("Rechargeable Torch", ProductCategory.ELECTRONICS),
+
+    # Category H: Stationery
+    "ball pen": ("Ballpoint Pen", ProductCategory.STATIONERY),
+    "gel pen": ("Gel Pen", ProductCategory.STATIONERY),
+    "pen": ("Writing Pen", ProductCategory.STATIONERY),
+    "pencil": ("Graphite Pencil", ProductCategory.STATIONERY),
+    "notebook": ("Paper Notebook", ProductCategory.STATIONERY),
+    "marker": ("Permanent Marker", ProductCategory.STATIONERY),
+    "highlighter": ("Highlighter Pen", ProductCategory.STATIONERY),
+    "eraser": ("Pencil Eraser", ProductCategory.STATIONERY),
+    "sharpener": ("Pencil Sharpener", ProductCategory.STATIONERY),
+    "stapler": ("Desktop Stapler", ProductCategory.STATIONERY),
+    "sticky notes": ("Sticky Notes", ProductCategory.STATIONERY),
+
+    # Category I: Toys
+    "toy": ("Children Toy", ProductCategory.TOYS),
+    "toy car": ("Toy Vehicle", ProductCategory.TOYS),
+    "doll": ("Fashion Doll", ProductCategory.TOYS),
+    "building blocks": ("Building Blocks Toy", ProductCategory.TOYS),
+    "puzzle": ("Jigsaw Puzzle", ProductCategory.TOYS),
+    "board game": ("Board Game", ProductCategory.TOYS),
+    "action figure": ("Action Figure Toy", ProductCategory.TOYS),
+    "rattle": ("Baby Rattle", ProductCategory.TOYS),
+    "soft toy": ("Plush Soft Toy", ProductCategory.TOYS),
+    "teddy bear": ("Plush Teddy Bear", ProductCategory.TOYS),
+
+    # Category J: Garments / Textiles
+    "shirt": ("Readymade Garment (Shirt)", ProductCategory.GARMENTS_TEXTILES),
+    "t-shirt": ("Readymade Garment (T-Shirt)", ProductCategory.GARMENTS_TEXTILES),
+    "trousers": ("Readymade Garment (Trousers)", ProductCategory.GARMENTS_TEXTILES),
+    "pants": ("Readymade Garment (Pants)", ProductCategory.GARMENTS_TEXTILES),
+    "jeans": ("Readymade Garment (Jeans)", ProductCategory.GARMENTS_TEXTILES),
+    "kurta": ("Readymade Garment (Kurta)", ProductCategory.GARMENTS_TEXTILES),
+    "hosiery": ("Hosiery Product", ProductCategory.GARMENTS_TEXTILES),
+    "socks": ("Hosiery (Socks)", ProductCategory.GARMENTS_TEXTILES),
+    "garment": ("Readymade Garment", ProductCategory.GARMENTS_TEXTILES),
+    "readymade garment": ("Readymade Garment", ProductCategory.GARMENTS_TEXTILES),
+    "bedsheet": ("Cotton Bedsheet", ProductCategory.GARMENTS_TEXTILES),
+    "towel": ("Bath Towel", ProductCategory.GARMENTS_TEXTILES),
+    "fabric": ("Textile Fabric", ProductCategory.GARMENTS_TEXTILES),
+
+    # Category K: Footwear
+    "shoes": ("Footwear (Shoes)", ProductCategory.FOOTWEAR),
+    "sports shoes": ("Sports Shoes", ProductCategory.FOOTWEAR),
+    "sneakers": ("Sneakers", ProductCategory.FOOTWEAR),
+    "sandals": ("Footwear (Sandals)", ProductCategory.FOOTWEAR),
+    "slippers": ("Footwear (Slippers)", ProductCategory.FOOTWEAR),
+    "flip flops": ("Footwear (Flip Flops)", ProductCategory.FOOTWEAR),
+    "boots": ("Footwear (Boots)", ProductCategory.FOOTWEAR),
+    "footwear": ("Footwear", ProductCategory.FOOTWEAR),
+
+    # Category L: Hardware / Tools
+    "screwdriver": ("Screwdriver Tool", ProductCategory.HARDWARE_TOOLS),
+    "spanner": ("Spanner / Wrench Tool", ProductCategory.HARDWARE_TOOLS),
+    "hammer": ("Claw Hammer", ProductCategory.HARDWARE_TOOLS),
+    "pliers": ("Combination Pliers", ProductCategory.HARDWARE_TOOLS),
+    "screws": ("Hardware Fasteners (Screws)", ProductCategory.HARDWARE_TOOLS),
+    "drill bit": ("Drill Bit", ProductCategory.HARDWARE_TOOLS),
+    "measuring tape": ("Measuring Tape", ProductCategory.HARDWARE_TOOLS),
+    "padlock": ("Security Padlock", ProductCategory.HARDWARE_TOOLS),
+
+    # Category M: Packaged Industrial Products
+    "industrial adhesive": ("Industrial Adhesive", ProductCategory.PACKAGED_INDUSTRIAL),
+    "lubricating grease": ("Lubricating Grease", ProductCategory.PACKAGED_INDUSTRIAL),
+    "machine oil": ("Machine Lubricant Oil", ProductCategory.PACKAGED_INDUSTRIAL),
+    "cutting oil": ("Cutting Oil", ProductCategory.PACKAGED_INDUSTRIAL),
+    "bearing": ("Ball Bearing", ProductCategory.PACKAGED_INDUSTRIAL),
+    "welding rod": ("Welding Electrode", ProductCategory.PACKAGED_INDUSTRIAL),
+
+    # Category N: Agricultural Products / Seeds / Inputs
+    "hybrid seeds": ("Hybrid Crop Seeds", ProductCategory.AGRICULTURAL),
+    "seeds": ("Agricultural Seeds", ProductCategory.AGRICULTURAL),
+    "pesticide": ("Agricultural Pesticide", ProductCategory.AGRICULTURAL),
+    "insecticide": ("Agricultural Insecticide", ProductCategory.AGRICULTURAL),
+    "fertilizer": ("Crop Fertilizer", ProductCategory.AGRICULTURAL),
+    "bio-fertilizer": ("Bio-Fertilizer", ProductCategory.AGRICULTURAL),
+
+    # Category O: Pet Food / Animal Products
+    "dog food": ("Dog Food", ProductCategory.PET_FOOD),
+    "cat food": ("Cat Food", ProductCategory.PET_FOOD),
+    "bird feed": ("Bird Feed", ProductCategory.PET_FOOD),
+    "fish food": ("Fish Food", ProductCategory.PET_FOOD),
+    "pet food": ("Packaged Pet Food", ProductCategory.PET_FOOD),
+
+    # Hardware / Paint / Tools (Category J)
+    "paint": ("Wall Paint / Emulsion", ProductCategory.HARDWARE),
+    "wall emulsion": ("Wall Emulsion Paint", ProductCategory.HARDWARE),
+    "emulsion": ("Emulsion Paint", ProductCategory.HARDWARE),
+    "acrylic emulsion": ("Acrylic Emulsion Paint", ProductCategory.HARDWARE),
+    "enamel paint": ("Enamel Paint", ProductCategory.HARDWARE),
+    "wall paint": ("Wall Paint", ProductCategory.HARDWARE),
+
+    # Imported Commodities (Category P)
+    "imported commodity": ("Imported Packaged Commodity", ProductCategory.IMPORTED),
+    "imported product": ("Imported Packaged Commodity", ProductCategory.IMPORTED),
+    "imported packaged commodity": ("Imported Packaged Commodity", ProductCategory.IMPORTED),
+
+    # Pan Masala & Tobacco (mapped to Tobacco Category N)
+    "pan masala": ("Pan Masala", ProductCategory.TOBACCO),
+    "supari": ("Betel Nut / Supari", ProductCategory.TOBACCO)
 }
+
+CATEGORY_CODE_MAP: Dict[str, str] = {
+    ProductCategory.FOOD: "A",
+    ProductCategory.BEVERAGES: "B",
+    ProductCategory.COSMETICS: "C",
+    ProductCategory.CLEANING: "D",
+    ProductCategory.PHARMA: "E",
+    ProductCategory.ELECTRONICS: "F",
+    ProductCategory.STATIONERY: "G",
+    ProductCategory.TOYS: "H",
+    ProductCategory.TEXTILES: "I",
+    ProductCategory.HARDWARE: "J",
+    ProductCategory.AUTOMOTIVE: "K",
+    ProductCategory.AGRICULTURAL: "L",
+    ProductCategory.PET: "M",
+    ProductCategory.TOBACCO: "N",
+    ProductCategory.INDUSTRIAL: "O",
+    ProductCategory.IMPORTED: "P",
+    ProductCategory.ECOMMERCE: "Q",
+    ProductCategory.UNKNOWN: "R",
+    # Backward compatibility aliases
+    "Food and Beverage": "A",
+    "Cosmetics and Personal Care": "C",
+    "Household Cleaning Products": "D",
+    "Toiletries": "D",
+    "Health / Wellness Products": "E",
+    "Packaged Household Goods": "D",
+    "Electrical / Electronic Consumer Products": "F",
+    "Stationery": "G",
+    "Toys": "H",
+    "Garments / Textiles": "I",
+    "Footwear": "I",
+    "Hardware / Tools": "J",
+    "Packaged Industrial Products": "O",
+    "Agricultural Products / Seeds / Inputs": "L",
+    "Pet Food / Animal Products": "M",
+    "Imported Packaged Commodity": "P",
+    "Other Packaged Commodity": "Q",
+    "Unknown / Uncertain": "R",
+    "Food & Beverage": "A",
+    "Cosmetics & Personal Care": "C",
+    "Cleaning & Household": "D",
+    "Garments & Apparel": "I",
+    "Electronics & Electricals": "F",
+    "Medical Devices": "E",
+    "Pan Masala & Tobacco": "N"
+}
+
+def classify_product_category(
+    joined_text: str,
+    extracted_lines: Optional[List[ExtractedLine]] = None
+) -> Tuple[str, str, float, str]:
+    """Universal 18-Category Product Classifier (Categories A through R)
+    Returns: (category_name, category_code, confidence, rationale)
+    
+    If ungrounded or ambiguous:
+    Returns (ProductCategory.UNKNOWN, 'R', 0.40, 'No definitive statutory commodity keywords identified; requires manual review')
+    """
+    text_lower = joined_text.lower()
+    
+    # 1. Match against COMMODITY_KEYWORDS (longest keyword match first)
+    sorted_keywords = sorted(COMMODITY_KEYWORDS.keys(), key=len, reverse=True)
+    for kw in sorted_keywords:
+        pattern = r'\b' + re.escape(kw) + r'\b'
+        if re.search(pattern, text_lower):
+            gen_name, cat = COMMODITY_KEYWORDS[kw]
+            code = CATEGORY_CODE_MAP.get(cat, "R")
+            return (cat, code, 0.95, f"Matched canonical commodity keyword '{kw}' corresponding to {cat} (Category {code})")
+
+    # 2. Check if product is explicitly declared as Imported Commodity under Chapter III / Rule 27
+    if re.search(r'\b(?:imported\s*(?:by|product|commodity|packaged\s*commodity)|month\s*&\s*year\s*of\s*import|country\s*of\s*origin\s*:\s*(?!india)[a-z]+|product\s*of\s+(?!india)[a-z]+)\b', text_lower):
+        return (ProductCategory.IMPORTED, "P", 0.95, "Identified explicit imported packaging declaration / non-India origin under Rule 6(1)(n) / Chapter III")
+            
+    # 3. Contextual feature detection
+    if re.search(r'\b(?:fssai|nutritional\s*information|per\s*100g|energy\s*kcal|ingredients\s*:\s*sugar|edible\s*vegetable)\b', text_lower):
+        return (ProductCategory.FOOD, "A", 0.92, "Identified food regulatory FSSAI / nutrition table declarations")
+    if re.search(r'\b(?:mfg\s*lic\s*no\s*cos|for\s*external\s*use\s*only|dermatologically\s*tested|inci\b|sunscreen|spf\s*\d+)\b', text_lower):
+        return (ProductCategory.COSMETICS, "C", 0.92, "Identified cosmetic manufacturing license / dermatological usage declaration")
+    if re.search(r'\b(?:kills\s*99\.9%|detergent|dishwash|surface\s*cleaner|bleach|disinfectant)\b', text_lower):
+        return (ProductCategory.CLEANING, "D", 0.91, "Identified household cleaning / disinfecting formulations")
+    if re.search(r'\b(?:beverage|fruit\s*juice|drink|nectar|squash)\b', text_lower):
+        return (ProductCategory.BEVERAGES, "B", 0.91, "Identified packaged beverage declarations")
+    if re.search(r'\b(?:rated\s*voltage|frequency\s*50hz|input\s*:\s*\d+v|output\s*:\s*\d+v|bis\s*reg|is\s*13252|wireless\s*mouse|keyboard)\b', text_lower):
+        return (ProductCategory.ELECTRONICS, "F", 0.93, "Identified electronic electrical rating / BIS safety compliance declaration")
+    if re.search(r'\b(?:choking\s*hazard|not\s*suitable\s*for\s*children\s*under\s*3|is\s*9873)\b', text_lower):
+        return (ProductCategory.TOYS, "H", 0.93, "Identified toy safety warning / IS 9873 compliance declaration")
+    if re.search(r'\b(?:chest\s*:\s*\d+\s*cm|waist\s*:\s*\d+\s*cm|100%\s*cotton|wash\s*care)\b', text_lower):
+        return (ProductCategory.TEXTILES, "I", 0.92, "Identified readymade garment body size / textile composition under Rule 26(e)")
+    if re.search(r'\b(?:size\s*:\s*\d+\s*(?:uk|ind|us|eu)|sole\s*material|upper\s*material)\b', text_lower):
+        return (ProductCategory.TEXTILES, "I", 0.92, "Identified footwear size / material specification declaration")
+    if re.search(r'\b(?:pet\s*food\s*only|dog\s*food|cat\s*food|crude\s*protein|crude\s*fiber)\b', text_lower):
+        return (ProductCategory.PET, "M", 0.92, "Identified pet animal food statutory nutritional declaration")
+    if re.search(r'\b(?:germination\s*min|inert\s*matter|weed\s*seeds|net\s*seeds|fertilizer|insecticide)\b', text_lower):
+        return (ProductCategory.AGRICULTURAL, "L", 0.91, "Identified agricultural inputs / seed quality statutory declaration")
+    if re.search(r'\b(?:for\s*industrial\s*use\s*only|industrial\s*adhesive|bearing\s*no)\b', text_lower):
+        return (ProductCategory.INDUSTRIAL, "O", 0.90, "Identified industrial packaged commodity declaration")
+    if re.search(r'\b(?:chrome\s*vanadium|torque|spanner|hex\s*key|screw\s*driver|emulsion|wall\s*paint)\b', text_lower):
+        return (ProductCategory.HARDWARE, "J", 0.90, "Identified hardware / hand tool specifications")
+    if re.search(r'\b(?:ruled\s*notebook|pages|gsm\s*paper|ball\s*pen|gel\s*pen|writing\s*instrument)\b', text_lower):
+        return (ProductCategory.STATIONERY, "G", 0.90, "Identified stationery item specifications")
+    if re.search(r'\b(?:dietary\s*supplement|nutraceutical|ayush|ayurvedic\s*medicine|not\s*for\s*medicinal\s*use)\b', text_lower):
+        return (ProductCategory.PHARMA, "E", 0.90, "Identified wellness / nutraceutical statutory declaration")
+    if re.search(r'\b(?:bathing\s*bar|toilet\s*soap|hand\s*wash|tfm\s*\d+%)\b', text_lower):
+        return (ProductCategory.CLEANING, "D", 0.91, "Identified toiletries / bathing bar formulation")
+        
+    # 4. Ungrounded / Ambiguous fallback -> Unknown / Uncertain (R)
+    return (ProductCategory.UNKNOWN, "R", 0.40, "No definitive statutory commodity keywords identified; requires manual review")
 
 # -------------------------------------------------------------------
 # SPATIAL NEIGHBORHOOD ASSOCIATION HELPERS
@@ -294,41 +581,55 @@ def classify_text_block(
     if MARKETING_CLAIM_PATTERNS.search(clean_t) or re.search(r'^(?:the\s+skincare\s+power\s+couple|experience\s+the|infused\s+with|our\s+unique\s+formula)\b', clean_t, re.I):
         return ("MARKETING_CLAIM", 0.95, "Matched promotional/advertising copy or performance claim")
 
-    # 2. Formulation Ingredients
-    if re.search(r'^(?:ingredients?|composition|contains|सामग्री)\b', clean_t, re.I) or len(INGREDIENT_PATTERNS.findall(clean_t)) >= 2:
-        return ("INGREDIENT", 0.95, "Matched formulation ingredient / chemical / botanical listing")
+    # 2. Usage / Storage Directions (STRICT PRIORITY: NEVER ADDRESS OR COMMERCIAL ENTITY)
+    if (re.search(r'^(?:direction\s*of\s*use|directions?(?:\s*for\s*use)?|how\s*to\s*use|mode\s*of\s*application|application|usage(?:\s*instructions?)?|storage(?:\s*instructions?)?|store\s*in|उपयोग\s*विधि)\b', clean_t, re.I)
+        or re.search(r'\b(?:apply\s*(?:generously|evenly|smoothly|liberally)|reapply\s*(?:every|after)|massage\s*gently|rinse\s*thoroughly|for\s*best\s*results\s*apply|rub\s*on|do\s*not\s*swallow|keep\s*in\s*a\s*cool\s*and\s*dry\s*place|store\s*away\s*from\s*direct\s*sunlight)\b', clean_t, re.I)):
+        return (SemanticRegionType.DIRECTIONS, 0.96, "Matched product usage, application or storage instructions")
 
-    # 3. Statutory Warnings / Advisories
-    if re.search(r'^(?:caution|warning|warnings?|for external use|keep out of reach|not for medicinal|चेतावनी)\b', clean_t, re.I):
-        return ("WARNING", 0.95, "Matched statutory caution/safety advisory statement")
+    # 3. Formulation Ingredients (STRICT PRIORITY: NEVER ADDRESS OR COMMERCIAL ENTITY)
+    if re.search(r'^(?:ingredients?|composition|key\s*ingredients?|active\s*ingredients?|contains|सामग्री)\b', clean_t, re.I) or len(INGREDIENT_PATTERNS.findall(clean_t)) >= 2:
+        return (SemanticRegionType.INGREDIENTS, 0.96, "Matched formulation ingredient / chemical / botanical listing")
 
-    # 4. Usage / Storage Directions
-    if re.search(r'^(?:directions?(?:\s*for\s*use)?|how\s*to\s*use|usage|storage|store\s*in|उपयोग\s*विधि)\b', clean_t, re.I):
-        return ("DIRECTIONS", 0.95, "Matched usage or storage instructions")
+    # 4. Possible Ingredients (comma-separated chemical / botanical substance listing)
+    if ("," in clean_t and len(clean_t.split(",")) >= 3 and
+        any(re.search(r'(?:aqua|water|glycerin|glycol|salicylate|acid|oxide|sulfate|chloride|extract|oil|paraben|fragrance|parfum|tocopherol|dimethicone|edta|niacinamide|citric)\b', part, re.I) for part in clean_t.split(","))):
+        return (SemanticRegionType.POSSIBLE_INGREDIENTS, 0.90, "Matched formulation chemical or botanical substance listing")
 
-    # 5. MRP
+    # 5. Statutory Warnings / Advisories
+    if re.search(r'^(?:caution|warning|warnings?|for\s*external\s*use\s*only|for\s*external\s*use|keep\s*out\s*of\s*reach|not\s*for\s*medicinal|avoid\s*contact\s*with\s*eyes|चेतावनी)\b', clean_t, re.I):
+        return (SemanticRegionType.WARNING, 0.95, "Matched statutory caution/safety advisory statement")
+
+    # 6. Marketer / Brand Owner
+    if re.search(r'^(?:marketed\s*by|mktg?\.?\s*by|distributed\s*by|mktd?\.?\s*by|मार्केटेड)\b', clean_t, re.I):
+        return (SemanticRegionType.MARKETER, 0.95, "Preceded by explicit statutory marketer contextual keyword")
+
+    # 7. Standalone Postal PIN Code
+    if re.fullmatch(r'\b[1-9][0-9]{5}\b', clean_t) or re.fullmatch(r'(?:pin|postal\s*code|pincode)\s*[:.\-\s]*[1-9][0-9]{5}', clean_t, re.I):
+        return (SemanticRegionType.POSTAL_PIN, 0.95, "Matched 6-digit postal PIN code under Rule 10(1)")
+
+    # 8. MRP
     for p in MRP_PATTERNS:
         if p.search(clean_t):
             return ("MRP", 0.96, "Matched retail sale price declaration under Rule 6(1)(e)")
 
-    # 6. Tax Inclusivity Phrase
+    # 9. Tax Inclusivity Phrase
     if TAX_PHRASE_REGEX.search(clean_t):
         return ("TAX_INCLUSIVE_WORDING", 0.96, "Matched statutory tax inclusivity phrase under Rule 6(1)(e)")
 
-    # 7. Unit Sale Price
+    # 10. Unit Sale Price
     if USP_PATTERN.search(clean_t):
         return ("UNIT_SALE_PRICE", 0.95, "Matched unit sale price declaration under Rule 6(11)")
 
-    # 8. Net Quantity
+    # 11. Net Quantity
     for p in NET_QTY_PATTERNS:
         if p.search(clean_t) and not NUTRITIONAL_IGNORE_REGEX.search(clean_t):
             return ("NET_QUANTITY", 0.95, "Matched net quantity / weight declaration under Rule 6(1)(c)")
 
-    # 9. Standalone Metric Unit Symbol
+    # 12. Standalone Metric Unit Symbol
     if re.fullmatch(r'(?:g|kg|ml|l|ltr|cm|m|N|units?|pieces?|पैक|ग्राम|मिली)', clean_t, re.I):
         return ("UNIT", 0.92, "Matched metric SI unit symbol under Rule 13")
 
-    # 10. Dates
+    # 13. Dates
     for p in MFD_PATTERNS:
         if p.search(clean_t):
             return ("MANUFACTURE_DATE", 0.95, "Matched month & year of manufacture declaration under Rule 6(1)(d)")
@@ -342,18 +643,18 @@ def classify_text_block(
         if p.search(clean_t):
             return ("EXPIRY_DATE", 0.95, "Matched consumer expiry / use by declaration under Rule 6(1)(da)")
 
-    # 11. Batch / Lot
+    # 14. Batch / Lot
     for p in BATCH_PATTERNS:
         if p.search(clean_t):
             if re.search(r'\blot\b', clean_t, re.I):
                 return ("LOT_NUMBER", 0.95, "Matched lot identification number under Rule 6(1)(g)")
             return ("BATCH_NUMBER", 0.95, "Matched batch identification number under Rule 6(1)(g)")
 
-    # 12. Country of Origin
+    # 15. Country of Origin
     if COO_PATTERN.search(clean_t) or re.search(r'\b(?:made\s*in|product\s*of|country\s*of\s*origin)\b', clean_t, re.I):
         return ("COUNTRY_OF_ORIGIN", 0.96, "Matched country of origin / manufacture declaration under Rule 6(1)(n)")
 
-    # 13. Consumer Care Contact Details
+    # 16. Consumer Care Contact Details
     if EMAIL_PATTERN.search(clean_t):
         return ("CONSUMER_CARE_EMAIL", 0.97, "Matched consumer grievance cell email address")
     if PHONE_PATTERN.search(clean_t) and re.search(r'(?:care|helpline|toll|free|phone|call|contact|grievance)', clean_t, re.I):
@@ -361,7 +662,7 @@ def classify_text_block(
     if re.search(r'\b(?:consumer\s*care\s*address|grievance\s*officer|postal\s*address)\b', clean_t, re.I):
         return ("CONSUMER_CARE_ADDRESS", 0.93, "Matched consumer care postal address")
 
-    # 14. Commercial Entities (Manufacturer, Packer, Importer)
+    # 17. Commercial Entities (Manufacturer, Packer, Importer)
     if re.search(r'^(?:mfd\.?\s*(?:&|and)?\s*marketed\s*by|mfg\.?\s*(?:&|and)?\s*marketed\s*by|manufactured\s*(?:&|and)?\s*marketed\s*by|mfd\.?\s*(?:by|at|for)|mfg\.?\s*(?:by|at|for)|manufactured\s*(?:by|at|for)|produced\s*(?:by|at)|made\s*by|विनिर्माता)\b', clean_t, re.I):
         return ("MANUFACTURER_NAME", 0.95, "Preceded by explicit statutory manufacturer contextual keyword")
     if re.search(r'^(?:packed\s*(?:by|at)|pkd\.?\s*(?:by|at)|pre-packed\s*by|packaged\s*by|पैकर)\b', clean_t, re.I):
@@ -369,21 +670,24 @@ def classify_text_block(
     if re.search(r'^(?:imported\s*(?:by|(?:and|&)\s*marketed\s*by)|imp\.?\s*by|importer|आयातक)\b', clean_t, re.I):
         return ("IMPORTER_NAME", 0.95, "Preceded by explicit statutory importer contextual keyword")
 
-    # 15. Address Components
-    if ADDRESS_CUES.search(clean_t) and (PIN_PATTERN.search(clean_t) or re.search(r'\b(?:plot|sector|phase|road|street|estate|ind\.\s*area|gidc|midc)\b', clean_t, re.I)):
-        if prev_lines and any(re.search(r'\b(?:packed|pkd)\b', pl, re.I) for pl in prev_lines[-2:]):
+    # 18. Address Components (STRICT SAFETY: never match if line is ingredient or direction)
+    is_safe_from_formulation = not any(w in clean_t.lower() for w in ["direction", "apply", "reapply", "aqua", "glycerin", "salicylic", "parfum", "tocopherol", "caution", "warning", "extract", "sorbitan", "stearic"])
+    if is_safe_from_formulation and ADDRESS_CUES.search(clean_t) and (PIN_PATTERN.search(clean_t) or re.search(r'\b(?:plot|sector|phase|road|street|estate|ind\.\s*area|gidc|midc)\b', clean_t, re.I)):
+        if prev_lines and any(re.search(r'\b(?:marketed|mktg|distributed)\b', pl, re.I) for pl in prev_lines[-2:]):
+            return ("MARKETER_ADDRESS", 0.93, "Contains structured address components linked to marketer")
+        elif prev_lines and any(re.search(r'\b(?:packed|pkd)\b', pl, re.I) for pl in prev_lines[-2:]):
             return ("PACKER_ADDRESS", 0.93, "Contains structured address components linked to packer")
         elif prev_lines and any(re.search(r'\b(?:imported|importer)\b', pl, re.I) for pl in prev_lines[-2:]):
             return ("IMPORTER_ADDRESS", 0.93, "Contains structured address components linked to importer")
         else:
             return ("MANUFACTURER_ADDRESS", 0.93, "Contains structured address components linked to manufacturer")
 
-    # 16. Generic Name dictionary keyword check
+    # 19. Generic Name dictionary keyword check
     for kw, (gen, cat) in COMMODITY_KEYWORDS.items():
         if re.search(r'\b' + re.escape(kw) + r'\b', clean_t.lower()):
             return ("GENERIC_NAME", 0.94, f"Matches statutory commodity classification dictionary for '{gen}'")
 
-    # 17. Uninterpretable / Noise tokens (e.g. 'AKM1 O1 HA')
+    # 20. Uninterpretable / Noise tokens (e.g. 'AKM1 O1 HA')
     if re.fullmatch(r'[A-Z0-9\s]{4,15}', clean_t) and not any(w in clean_t.lower() for w in ['ltd', 'pvt', 'mrp', 'net', 'exp', 'mfd', 'mfg', 'box', 'pack', 'tea', 'oil', 'flour', 'rice']):
         vowels = sum(1 for c in clean_t.lower() if c in 'aeiou')
         if vowels <= 1 and len(clean_t.replace(" ", "")) >= 5:
@@ -593,22 +897,40 @@ def extract_commercial_entities(
             raw_lines=raw_lines_collected
         )
 
-    # Fallback: if manufacturer is not detected, search for address cues + 6-digit PIN in entire label
+    # Fallback: if manufacturer is not detected and NO other commercial entity was detected,
+    # search for address cues + 6-digit PIN in entire label.
     # Rule: NEVER invent a manufacturer name without contextual evidence! Address alone is recorded as address.
-    if not entities["manufacturer"].name and not entities["manufacturer"].full_address:
+    # CRITICAL: If Marketer, Packer, or Importer is ALREADY found, DO NOT re-assign that address to manufacturer!
+    has_other_entity = bool(
+        (entities["marketer"].name and entities["marketer"].name != "Not detected") or
+        (entities["packer"].name and entities["packer"].name != "Not detected") or
+        (entities["importer"].name and entities["importer"].name != "Not detected")
+    )
+    if not has_other_entity and not entities["manufacturer"].name and not entities["manufacturer"].full_address:
         mfg_cand_lines: List[str] = []
         bboxes_cand: List[BoundingBox] = []
         for idx, line in enumerate(extracted_lines):
             t = line.text.strip()
-            if MARKETING_CLAIM_PATTERNS.search(t) or INGREDIENT_PATTERNS.search(t):
+            # STRICT EXCLUSIONS: Skip marketing, ingredients, directions, warnings
+            if (MARKETING_CLAIM_PATTERNS.search(t) or INGREDIENT_PATTERNS.search(t)
+                or getattr(line, "classification", "") in [
+                    "MARKETING_CLAIM", "DIRECTIONS", "INGREDIENTS", "POSSIBLE_INGREDIENTS", "WARNING"
+                ]
+                or any(w in t.lower() for w in ["direction", "apply", "reapply", "aqua", "glycerin", "salicylic", "parfum", "tocopherol", "caution", "warning"])):
                 continue
             if ADDRESS_CUES.search(t):
                 mfg_cand_lines.append(t)
                 if line.bbox:
                     bboxes_cand.append(line.bbox)
                 for nb in find_spatial_neighbors(idx, extracted_lines, max_dy=18.0):
-                    if nb.text.strip() not in mfg_cand_lines and not statutory_cutoffs.search(nb.text.strip()) and not MARKETING_CLAIM_PATTERNS.search(nb.text.strip()) and not INGREDIENT_PATTERNS.search(nb.text.strip()):
-                        mfg_cand_lines.append(nb.text.strip())
+                    nb_t = nb.text.strip()
+                    if (nb_t not in mfg_cand_lines and not statutory_cutoffs.search(nb_t)
+                        and not MARKETING_CLAIM_PATTERNS.search(nb_t) and not INGREDIENT_PATTERNS.search(nb_t)
+                        and getattr(nb, "classification", "") not in [
+                            "MARKETING_CLAIM", "DIRECTIONS", "INGREDIENTS", "POSSIBLE_INGREDIENTS", "WARNING"
+                        ]
+                        and not any(w in nb_t.lower() for w in ["direction", "apply", "reapply", "aqua", "glycerin", "salicylic", "parfum", "tocopherol", "caution", "warning"])):
+                        mfg_cand_lines.append(nb_t)
                         if nb.bbox:
                             bboxes_cand.append(nb.bbox)
                 break
@@ -726,23 +1048,42 @@ def process_and_classify_text(
     text_for_declarations = "\n".join(non_nutri_lines) if non_nutri_lines else joined_text
 
     # -------------------------------------------------------------------------
-    # 1. Product Name, Generic Commodity Name & Category (Rule 6(1)(b) & Rule 2(k))
+    # 1. Product Category, Product Name & Generic Commodity Name (Categories A through R)
     # -------------------------------------------------------------------------
+    cat_name, cat_code, cat_conf, cat_rat = classify_product_category(joined_text, extracted_lines)
+    data.product_category = cat_name
+    data.category_code = cat_code
+    data.classification_status = "COMPLETED" if cat_code != "R" else "NEEDS_REVIEW"
+
     detected_generic_name = ""
-    detected_category = "Packaged Commodity"
+    detected_category = cat_name
     detected_product_line = ""
     target_pname_line = None
 
     for kw, (generic, cat) in COMMODITY_KEYWORDS.items():
         if re.search(r'\b' + re.escape(kw) + r'\b', joined_lower):
             detected_generic_name = generic
-            detected_category = cat
             break
 
-    # Find prominent product title line (strictly shielding marketing claims and ingredients)
+    # Extract directions, ingredients, warnings, and postal pin declarations
+    dir_lines = [l.text.strip() for l in extracted_lines if getattr(l, "classification", "") == SemanticRegionType.DIRECTIONS]
+    ing_lines = [l.text.strip() for l in extracted_lines if getattr(l, "classification", "") in [SemanticRegionType.INGREDIENTS, SemanticRegionType.POSSIBLE_INGREDIENTS]]
+    warn_lines = [l.text.strip() for l in extracted_lines if getattr(l, "classification", "") == SemanticRegionType.WARNING]
+    
+    data.directions_text = " | ".join(dir_lines) if dir_lines else None
+    data.ingredients_text = " | ".join(ing_lines) if ing_lines else None
+    data.warnings_text = " | ".join(warn_lines) if warn_lines else None
+    
+    pin_m = PIN_PATTERN.search(joined_text)
+    data.postal_pin = pin_m.group(1) if pin_m else None
+
+    # Find prominent product title line (strictly shielding marketing claims, directions, ingredients, warnings)
     for idx, line in enumerate(extracted_lines):
         t = line.text.strip()
-        if line.classification in ["MARKETING_CLAIM", "INGREDIENT", "WARNING", "DIRECTIONS"]:
+        if line.classification in [
+            "MARKETING_CLAIM", "INGREDIENT", "INGREDIENTS", "POSSIBLE_INGREDIENTS",
+            "WARNING", "DIRECTIONS", "MARKETER", "MANUFACTURER_NAME", "MANUFACTURER_ADDRESS"
+        ]:
             continue
         if MARKETING_CLAIM_PATTERNS.search(t) or INGREDIENT_PATTERNS.search(t):
             continue
@@ -766,12 +1107,12 @@ def process_and_classify_text(
         pname_reasoning = f"OCR produced uninterpretable character sequence ('{pname_raw}') lacking semantic commodity validity."
     else:
         data.product_name = pname_raw
-        data.commodity_name = detected_generic_name or data.product_name
+        data.commodity_name = detected_generic_name or (cat_name if cat_name != ProductCategory.UNKNOWN else data.product_name)
         data.generic_name = detected_generic_name or None
         pname_status = "Found"
         pname_conf, pname_level = calculate_field_confidence(0.96, 1.0, 1.0, 1.0, 1.0, 1.0)
         pname_review = None
-        pname_reasoning = "Identified commercial trade name on display panel excluding promotional claims and ingredients."
+        pname_reasoning = "Identified commercial trade name on display panel excluding promotional claims, directions, and ingredients."
 
     # Detect Brand Name
     brand_val = ""
@@ -960,6 +1301,7 @@ def process_and_classify_text(
     mfg_info = entities["manufacturer"]
     packer_info = entities["packer"]
     importer_info = entities["importer"]
+    marketer_info = entities.get("marketer", AddressInfo(entity_type="Marketer"))
 
     data.manufacturer = mfg_info
     data.manufacturer_name = mfg_info.name or None
@@ -973,11 +1315,20 @@ def process_and_classify_text(
     data.importer_name = importer_info.name or None
     data.importer_address = importer_info.full_address or None
 
+    data.marketer = marketer_info if marketer_info.name else None
+
     mfg_bbox = BoundingBox(x=12.0, y=55.0, width=75.0, height=12.0, label="Manufacturer")
     mfg_surface = surface
     mfg_line = None
     for line in extracted_lines:
         if mfg_info.name and mfg_info.name.lower() in line.text.lower():
+            mfg_line = line
+            if line.bbox:
+                mfg_bbox = line.bbox
+            if line.surface:
+                mfg_surface = line.surface
+            break
+        elif not mfg_info.name and marketer_info.name and marketer_info.name.lower() in line.text.lower():
             mfg_line = line
             if line.bbox:
                 mfg_bbox = line.bbox
@@ -991,8 +1342,15 @@ def process_and_classify_text(
     mfg_name_status = "Found" if mfg_info.name else "Under Review"
     mfg_name_val = mfg_info.name or "Not detected"
     mfg_name_conf, mfg_name_level = calculate_field_confidence(0.95, 1.0, 1.0, 1.0, 1.0, 1.0) if mfg_info.name else (0.45, "Needs Review")
-    mfg_name_reason = "Identified commercial corporate entity immediately following statutory 'Manufactured by' declaration." if mfg_info.name else "No statutory manufacturer contextual prefix ('Manufactured by') found on package."
-    mfg_name_review = None if mfg_info.name else "Manufacturer contextual prefix not detected; cannot assign entity without statutory evidence."
+    if mfg_info.name:
+        mfg_name_reason = "Identified commercial corporate entity immediately following statutory 'Manufactured by' declaration."
+        mfg_name_review = None
+    elif marketer_info.name:
+        mfg_name_reason = f"Manufacturer name not detected on this panel. Marketer declared: {marketer_info.name}."
+        mfg_name_review = f"Manufacturer contextual prefix not detected on this panel (Marketed by: {marketer_info.name}). Verify secondary panels under Rule 6(2)."
+    else:
+        mfg_name_reason = "No statutory manufacturer contextual prefix ('Manufactured by') found on package."
+        mfg_name_review = "Manufacturer contextual prefix not detected; cannot assign entity without statutory evidence."
 
     canonical_fields.append(CanonicalField(
         field_name="manufacturer_name",
@@ -1004,7 +1362,7 @@ def process_and_classify_text(
         status=mfg_name_status,
         bbox=mfg_bbox,
         rule_reference="Rule 6(1)(a) & Rule 10",
-        penal_provision="Section 36(1) read with Rule 10" if not mfg_info.name else None,
+        penal_provision="Section 36(1) read with Rule 10" if (not mfg_info.name and not marketer_info.name) else None,
         review_reason=mfg_name_review,
         assignment_reasoning=mfg_name_reason,
         surrounding_context=mfg_context,
@@ -1036,11 +1394,16 @@ def process_and_classify_text(
         mfg_addr_review = None
         mfg_addr_conf, mfg_addr_level = calculate_field_confidence(0.95, 1.0, 1.0, 1.0, 1.0, 1.0)
         mfg_addr_reason = f"Aggregated address continuation lines and verified mandatory 6-digit postal PIN ({mfg_info.pin_code}) under Rule 10(1)."
-    elif mfg_info.full_address:
+    elif mfg_info.full_address and mfg_info.name:
         mfg_addr_status = "Defective"
         mfg_addr_review = "Violation: Mandatory 6-digit postal PIN code missing from manufacturer address under Rule 10(1)."
         mfg_addr_conf, mfg_addr_level = calculate_field_confidence(0.85, 1.0, 1.0, 1.0, 0.6, 1.0)
         mfg_addr_reason = "Manufacturer address detected but lacks mandatory 6-digit postal PIN code required by Rule 10(1)."
+    elif marketer_info.name and marketer_info.has_valid_pin:
+        mfg_addr_status = "Under Review"
+        mfg_addr_review = f"Manufacturer address not detected on current panel (Marketer address declared with PIN {marketer_info.pin_code}). Verify secondary panels under Rule 6(2)."
+        mfg_addr_conf, mfg_addr_level = 0.85, "Medium"
+        mfg_addr_reason = f"Marketer address declared with valid postal PIN ({marketer_info.pin_code}). Manufacturer address to be checked on secondary surfaces."
     else:
         mfg_addr_status = "Under Review"
         mfg_addr_review = "Manufacturer address not detected on current surface."
@@ -1050,7 +1413,7 @@ def process_and_classify_text(
     canonical_fields.append(CanonicalField(
         field_name="manufacturer_address",
         statutory_name="Complete Address of Manufacturer with PIN Code",
-        extracted_value=mfg_info.full_address or "Not detected",
+        extracted_value=mfg_info.full_address or ("Not detected (Marketer address declared)" if marketer_info.name else "Not detected"),
         raw_ocr_value=" ".join(mfg_info.raw_lines),
         confidence=mfg_addr_conf,
         confidence_level=mfg_addr_level,
@@ -1067,7 +1430,7 @@ def process_and_classify_text(
     evidence_map["manufacturer_address"] = FieldEvidence(
         field_name="manufacturer_address",
         label="Manufacturer Address",
-        value=mfg_info.full_address or "Not detected",
+        value=mfg_info.full_address or ("Not detected (Marketer address declared)" if marketer_info.name else "Not detected"),
         ocr_confidence=mfg_addr_conf,
         detection_confidence=0.92,
         validation_confidence=0.90,
@@ -1082,6 +1445,42 @@ def process_and_classify_text(
         semantic_class="MANUFACTURER_ADDRESS",
         raw_ocr=" ".join(mfg_info.raw_lines)
     )
+
+    # Optional Field: marketer (if declared on packaging)
+    if marketer_info.name:
+        mkt_conf, mkt_level = calculate_field_confidence(0.95, 1.0, 1.0, 1.0, 1.0, 1.0)
+        canonical_fields.append(CanonicalField(
+            field_name="marketer",
+            statutory_name="Name and Address of Marketer / Brand Owner",
+            extracted_value=f"{marketer_info.name}, {marketer_info.full_address}",
+            raw_ocr_value=" ".join(marketer_info.raw_lines),
+            confidence=mkt_conf,
+            confidence_level=mkt_level,
+            status="Found",
+            bbox=mfg_bbox,
+            rule_reference="Rule 6(1)(a)",
+            assignment_reasoning=f"Identified marketer entity with postal PIN ({marketer_info.pin_code}).",
+            surrounding_context=mfg_context,
+            semantic_class="MARKETER",
+            detected_on_surface=mfg_surface
+        ))
+        evidence_map["marketer"] = FieldEvidence(
+            field_name="marketer",
+            label="Marketer Details",
+            value=f"{marketer_info.name}, {marketer_info.full_address}",
+            ocr_confidence=mkt_conf,
+            detection_confidence=0.95,
+            validation_confidence=0.95,
+            overall_confidence=mkt_conf,
+            source_text=marketer_info.full_address,
+            surface=mfg_surface,
+            bounding_box=mfg_bbox,
+            status="DETECTED",
+            assignment_reasoning="Extracted marketer entity with postal address.",
+            surrounding_context=mfg_context,
+            semantic_class="MARKETER",
+            raw_ocr=" ".join(marketer_info.raw_lines)
+        )
 
     # Field 7 & 8: packer_name & packer_address (Strict: Do NOT assume manufacturer = packer)
     if packer_info.name:
@@ -1893,7 +2292,109 @@ def process_and_classify_text(
     )
 
     data.evidence = evidence_map
+
+    # Populate multi-tier confidence metrics on all CanonicalFields and FieldEvidences
+    for f in canonical_fields:
+        f.image_quality_confidence = 0.95
+        f.ocr_confidence = f.confidence
+        f.region_classification_confidence = 0.95
+        f.field_extraction_confidence = 0.95
+        f.rule_validation_confidence = 0.95
+        f.overall_confidence = f.confidence
+
+    for k, ev in evidence_map.items():
+        ev.image_quality_confidence = 0.95
+        ev.ocr_confidence = ev.ocr_confidence
+        ev.region_classification_confidence = 0.95
+        ev.field_extraction_confidence = 0.95
+        ev.rule_validation_confidence = 0.95
+        ev.overall_confidence = ev.overall_confidence
+
     return data, canonical_fields, evidence_map
+
+# -------------------------------------------------------------------
+# STEP 3.5b: LM-COMPASS STRUCTURED COMPLIANCE DOSSIER BUILDER
+# -------------------------------------------------------------------
+
+def build_lm_compass_dossier(
+    data: StructuredProductData,
+    canonical_fields: List[CanonicalField],
+    evidence_map: Dict[str, FieldEvidence],
+    checks: List[ComplianceCheckItem],
+    surfaces_processed: Optional[List[str]] = None
+) -> LmCompassResult:
+    """Builds the Master Prompt Section 27 Structured Compliance Dossier.
+    Ensures high precision, evidence-grounded violation reporting, and clear routing
+    to NEEDS_REVIEW whenever evidence is ambiguous or incomplete.
+    """
+    fields_list: List[LmCompassFieldItem] = []
+    for cf in canonical_fields:
+        fields_list.append(LmCompassFieldItem(
+            field=cf.field_name,
+            extracted_value=str(cf.extracted_value),
+            semantic_region=cf.semantic_class or "UNKNOWN",
+            bbox=cf.bbox,
+            ocr_confidence=cf.ocr_confidence,
+            classification_confidence=cf.region_classification_confidence,
+            extraction_confidence=cf.field_extraction_confidence,
+            status="DETECTED" if cf.status == "Found" else ("NOT_APPLICABLE" if "Not Applicable" in str(cf.extracted_value) else "UNCERTAIN")
+        ))
+
+    comp_items: List[LmCompassComplianceItem] = []
+    vio_items: List[LmCompassViolationItem] = []
+    review_items: List[LmCompassNeedsReviewItem] = []
+
+    for chk in checks:
+        if chk.status == "PASS":
+            comp_items.append(LmCompassComplianceItem(
+                rule=chk.rule_no,
+                requirement=chk.statutory_requirement,
+                evidence=chk.detected_declaration,
+                bbox=chk.bounding_box,
+                status="COMPLIANT",
+                confidence=chk.confidence
+            ))
+        elif chk.status == "FAIL":
+            ev_text = chk.violation_evidence_text or chk.detected_declaration
+            vio_items.append(LmCompassViolationItem(
+                violation=chk.rule_title,
+                rule=chk.rule_no,
+                evidence_text=ev_text,
+                evidence_bbox=chk.violation_evidence_bbox or chk.bounding_box,
+                explanation=chk.detected_declaration,
+                confidence=chk.confidence
+            ))
+        elif chk.status in ["NEEDS REVIEW", "WARN", "NOT DETECTED"]:
+            review_items.append(LmCompassNeedsReviewItem(
+                uncertain_field=chk.rule_no,
+                reason=chk.detected_declaration,
+                bbox=chk.bounding_box,
+                suggested_action=f"Inspect packaging for {chk.rule_title} under {chk.sub_rule}"
+            ))
+
+    if vio_items:
+        overall_status = "NON_COMPLIANT"
+    elif review_items:
+        overall_status = "NEEDS_REVIEW"
+    else:
+        overall_status = "COMPLIANT"
+
+    cat_name = data.product_category or ProductCategory.OTHER
+    cat_code = getattr(data, "category_code", None) or CATEGORY_CODE_MAP.get(cat_name, "Q")
+    class_status = "COMPLETED" if cat_code != "R" else "NEEDS_REVIEW"
+
+    return LmCompassResult(
+        product_name=data.product_name,
+        category=f"{cat_name} (Category {cat_code})" if cat_code else cat_name,
+        classification_status=class_status,
+        panels=surfaces_processed if surfaces_processed else ["Front (PDP)"],
+        fields=fields_list,
+        compliance=comp_items,
+        violations=vio_items,
+        needs_review=review_items,
+        overall_status=overall_status,
+        overall_confidence=0.95
+    )
 
 # -------------------------------------------------------------------
 # STEP 3.6: MULTI-SURFACE FUSION ENGINE
@@ -1951,6 +2452,9 @@ def fuse_multi_surface_extractions(
                 fused_data.manufacturer = p_data.manufacturer
                 fused_data.manufacturer_name = p_data.manufacturer_name
                 fused_data.manufacturer_address = p_data.manufacturer_address
+        if p_data.marketer and p_data.marketer.name and p_data.marketer.name != "Not detected":
+            if not fused_data.marketer or not fused_data.marketer.name or fused_data.marketer.name == "Not detected":
+                fused_data.marketer = p_data.marketer
         if p_data.net_quantity and p_data.net_quantity.value > 0 and fused_data.net_quantity.value == 0:
             fused_data.net_quantity = p_data.net_quantity
         if p_data.mrp and p_data.mrp.amount > 0 and fused_data.mrp.amount == 0:
@@ -1979,6 +2483,39 @@ def fuse_multi_surface_extractions(
             if not fused_data.importer or not fused_data.importer.name or fused_data.importer.name == "Not detected":
                 fused_data.importer = p_data.importer
                 fused_data.importer_name = p_data.importer_name
+
+    # Duplicate Consistency Cross-Panel Check
+    quantities = [(surf, p_data.net_quantity.value, p_data.net_quantity.unit) for surf, p_data, _, _ in normalized_extractions if p_data.net_quantity.value > 0]
+    if len(quantities) > 1:
+        first_q = quantities[0][1]
+        conflicts = [q for q in quantities if q[1] != first_q]
+        if conflicts:
+            fused_data.net_quantity.has_contradiction = True
+            fused_data.net_quantity.contradiction_note = f"CONFLICT DETECTED: Discrepancy between panels ({quantities[0][0]}: {first_q} vs {conflicts[0][0]}: {conflicts[0][1]}); routed to Needs Review."
+            if "net_quantity" in best_fields:
+                best_fields["net_quantity"].status = "Under Review"
+                best_fields["net_quantity"].confidence = 0.45
+                best_fields["net_quantity"].review_reason = fused_data.net_quantity.contradiction_note
+        else:
+            if "net_quantity" in best_fields:
+                best_fields["net_quantity"].assignment_reasoning += " (CONSISTENT across panels)"
+                best_fields["net_quantity"].confidence = min(0.99, best_fields["net_quantity"].confidence + 0.03)
+
+    mrps = [(surf, p_data.mrp.amount) for surf, p_data, _, _ in normalized_extractions if p_data.mrp.amount > 0]
+    if len(mrps) > 1:
+        first_mrp = mrps[0][1]
+        mrp_conflicts = [m for m in mrps if m[1] != first_mrp]
+        if mrp_conflicts:
+            fused_data.mrp.has_contradiction = True
+            fused_data.mrp.contradiction_note = f"CONFLICT DETECTED: Conflicting MRPs between panels ({mrps[0][0]}: ₹{first_mrp} vs {mrp_conflicts[0][0]}: ₹{mrp_conflicts[0][1]}); routed to Needs Review under Rule 6(1)(e)."
+            if "mrp" in best_fields:
+                best_fields["mrp"].status = "Under Review"
+                best_fields["mrp"].confidence = 0.45
+                best_fields["mrp"].review_reason = fused_data.mrp.contradiction_note
+        else:
+            if "mrp" in best_fields:
+                best_fields["mrp"].assignment_reasoning += " (CONSISTENT across panels)"
+                best_fields["mrp"].confidence = min(0.99, best_fields["mrp"].confidence + 0.03)
 
     fused_canonical = list(best_fields.values())
     return fused_data, fused_canonical, best_evidences

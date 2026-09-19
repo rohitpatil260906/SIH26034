@@ -3,6 +3,102 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 # ----------------------------------------------------
+# LM-COMPASS: CATEGORY, REGION & UNIVERSAL DECISION CONSTANTS
+# ----------------------------------------------------
+
+class ProductCategory:
+    """Categories A through R as defined in Universal Legal Metrology Vision Engine Master Specification."""
+    FOOD = "Category A — Food & Food Products"                                  # A
+    BEVERAGES = "Category B — Beverages & Bottled Liquids"                      # B
+    COSMETICS = "Category C — Cosmetics & Personal Care"                        # C
+    CLEANING = "Category D — Cleaning, Detergents & Household Care"             # D
+    PHARMA = "Category E — Pharmaceuticals, Medical Devices & Healthcare"       # E
+    ELECTRONICS = "Category F — Electronics, Electrical Appliances & IT Goods"  # F
+    STATIONERY = "Category G — Stationery, Paper, Office & School Supplies"     # G
+    TOYS = "Category H — Toys, Baby Gear & Infant Products"                     # H
+    TEXTILES = "Category I — Textiles, Apparel, Footwear & Accessories"         # I
+    HARDWARE = "Category J — Hardware, Construction, Paint & Tools"             # J
+    AUTOMOTIVE = "Category K — Automotive Parts, Lubricants & Accessories"      # K
+    AGRICULTURAL = "Category L — Agricultural, Seeds, Fertilizers & Pesticides" # L
+    PET = "Category M — Pet Food & Animal Care Products"                        # M
+    TOBACCO = "Category N — Tobacco, Pan Masala & Related Commodities"          # N
+    INDUSTRIAL = "Category O — Industrial Raw Materials & Bulk Packaged Goods"  # O
+    IMPORTED = "Category P — Imported Commodities (Special Provisions)"         # P
+    ECOMMERCE = "Category Q — E-Commerce / Outer Delivery Packages"             # Q
+    UNKNOWN = "Category R — Unknown / Uncertain / Ambiguous Commodity"          # R
+
+    # Backward compatibility aliases
+    FOOD_BEVERAGE = FOOD
+    COSMETICS_PERSONAL_CARE = COSMETICS
+    HOUSEHOLD_CLEANING = CLEANING
+    TOILETRIES = CLEANING
+    HEALTH_WELLNESS = PHARMA
+    PACKAGED_HOUSEHOLD_GOODS = CLEANING
+    GARMENTS_TEXTILES = TEXTILES
+    FOOTWEAR = TEXTILES
+    HARDWARE_TOOLS = HARDWARE
+    PACKAGED_INDUSTRIAL = INDUSTRIAL
+    PET_FOOD = PET
+    OTHER = ECOMMERCE
+
+class SemanticRegionType:
+    """38 statutory semantic region classifications."""
+    PRODUCT_NAME = "PRODUCT_NAME"
+    BRAND_NAME = "BRAND_NAME"
+    VARIANT = "VARIANT"
+    DESCRIPTION = "DESCRIPTION"
+    NET_QUANTITY = "NET_QUANTITY"
+    MRP = "MRP"
+    UNIT_PRICE = "UNIT_PRICE"
+    MANUFACTURER = "MANUFACTURER"
+    PACKER = "PACKER"
+    IMPORTER = "IMPORTER"
+    MARKETER = "MARKETER"
+    ADDRESS = "ADDRESS"
+    POSTAL_PIN = "POSTAL_PIN"
+    COUNTRY_OF_ORIGIN = "COUNTRY_OF_ORIGIN"
+    CONSUMER_CARE = "CONSUMER_CARE"
+    PHONE = "PHONE"
+    EMAIL = "EMAIL"
+    WEBSITE = "WEBSITE"
+    BATCH_NUMBER = "BATCH_NUMBER"
+    LOT_NUMBER = "LOT_NUMBER"
+    DATE_OF_MANUFACTURE = "DATE_OF_MANUFACTURE"
+    DATE_OF_PACKING = "DATE_OF_PACKING"
+    MONTH_YEAR = "MONTH_YEAR"
+    EXPIRY = "EXPIRY"
+    BEST_BEFORE = "BEST_BEFORE"
+    USE_BY = "USE_BY"
+    INGREDIENTS = "INGREDIENTS"
+    POSSIBLE_INGREDIENTS = "POSSIBLE_INGREDIENTS"
+    DIRECTIONS = "DIRECTIONS"
+    WARNING = "WARNING"
+    CAUTION = "CAUTION"
+    PRECAUTION = "PRECAUTION"
+    USAGE = "USAGE"
+    NUTRITION_INFORMATION = "NUTRITION_INFORMATION"
+    ALLERGEN_INFORMATION = "ALLERGEN_INFORMATION"
+    STORAGE_INFORMATION = "STORAGE_INFORMATION"
+    LICENSE_INFORMATION = "LICENSE_INFORMATION"
+    BARCODE = "BARCODE"
+    QR_CODE = "QR_CODE"
+    OTHER_DECLARATIONS = "OTHER_DECLARATIONS"
+
+class UniversalFieldStatus:
+    DETECTED = "DETECTED"
+    NOT_DETECTED = "NOT_DETECTED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    UNCERTAIN = "UNCERTAIN"
+    CONFLICT = "CONFLICT"
+
+class UniversalComplianceStatus:
+    COMPLIANT = "COMPLIANT"
+    NON_COMPLIANT = "NON_COMPLIANT"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+# ----------------------------------------------------
 # STAGE 2: COMPUTER VISION BRANCH MODELS
 # ----------------------------------------------------
 
@@ -129,6 +225,12 @@ class CanonicalField(BaseModel):
     assignment_reasoning: Optional[str] = None
     surrounding_context: Optional[str] = None
     semantic_class: Optional[str] = None
+    image_quality_confidence: float = 0.95
+    ocr_confidence: float = 0.95
+    region_classification_confidence: float = 0.95
+    field_extraction_confidence: float = 0.95
+    rule_validation_confidence: float = 0.95
+    overall_confidence: float = 0.95
 
 class AddressInfo(BaseModel):
     name: str = ""
@@ -140,6 +242,8 @@ class AddressInfo(BaseModel):
     entity_type: str = "Manufacturer"  # Manufacturer, Packer, Importer, Marketer
     raw_lines: List[str] = Field(default_factory=list)
 
+CommercialEntity = AddressInfo
+
 class NetQuantityInfo(BaseModel):
     raw_text: str = ""
     value: float = 0.0
@@ -148,6 +252,8 @@ class NetQuantityInfo(BaseModel):
     font_height_mm: float = 3.0
     complies_standard_units: bool = True
     prohibited_unit_detected: Optional[str] = None
+    has_contradiction: bool = False
+    contradiction_note: Optional[str] = None
 
 class MrpInfo(BaseModel):
     raw_text: str = ""
@@ -156,6 +262,8 @@ class MrpInfo(BaseModel):
     tax_inclusive_statement_present: bool = True
     complies_tax_phrase: bool = True
     is_uncertain: bool = False
+    has_contradiction: bool = False
+    contradiction_note: Optional[str] = None
 
 class UnitSalePriceInfo(BaseModel):
     raw_text: Optional[str] = None
@@ -186,6 +294,7 @@ class Table1HeightCheck(BaseModel):
 
 class ProductClassification(BaseModel):
     product_type: str = "Other packaged commodity"
+    category_code: str = "Q"
     is_imported: bool = False
     is_multipack: bool = False
     is_liquid: bool = False
@@ -193,6 +302,7 @@ class ProductClassification(BaseModel):
     is_scheduled_commodity: bool = False
     pdp_area_cm2: float = 120.0
     confidence: float = 0.95
+    status: str = "COMPLETED"
     reasoning: str = ""
 
 class FieldEvidence(BaseModel):
@@ -203,6 +313,10 @@ class FieldEvidence(BaseModel):
     detection_confidence: float = 0.95
     validation_confidence: float = 0.95
     overall_confidence: float = 0.95
+    image_quality_confidence: float = 0.95
+    region_classification_confidence: float = 0.95
+    field_extraction_confidence: float = 0.95
+    rule_validation_confidence: float = 0.95
     source_text: str = ""
     image_id: Optional[str] = None
     surface: str = "Front (PDP)"
@@ -223,6 +337,9 @@ class FieldEvidence(BaseModel):
 class StructuredProductData(BaseModel):
     product_name: str = ""
     commodity_name: str = ""
+    product_category: str = "Other Packaged Commodity"
+    category_code: str = "Q"
+    classification_status: str = "COMPLETED"
     brand: Optional[str] = None
     generic_name: Optional[str] = None
     variant: Optional[str] = None
@@ -235,6 +352,14 @@ class StructuredProductData(BaseModel):
     importer: Optional[AddressInfo] = None
     importer_name: Optional[str] = None
     importer_address: Optional[str] = None
+    marketer: Optional[AddressInfo] = None
+    marketer_name: Optional[str] = None
+    marketer_address: Optional[str] = None
+    postal_pin: Optional[str] = None
+    ingredients_text: Optional[str] = None
+    directions_text: Optional[str] = None
+    warnings_text: Optional[str] = None
+    nutrition_text: Optional[str] = None
     brand_owner: Optional[str] = None
     net_quantity: NetQuantityInfo = Field(default_factory=NetQuantityInfo)
     mrp: MrpInfo = Field(default_factory=MrpInfo)
@@ -275,6 +400,58 @@ class ComplianceCheckItem(BaseModel):
     amendment_citation: Optional[str] = None
     effective_date: Optional[str] = None
     original_text: Optional[str] = None
+    confidence: float = 0.95
+    violation_evidence_text: Optional[str] = None
+    violation_evidence_bbox: Optional[BoundingBox] = None
+
+# ----------------------------------------------------
+# LM-COMPASS SECTION 27: STRUCTURED COMPLIANCE DOSSIER MODELS
+# ----------------------------------------------------
+
+class LmCompassFieldItem(BaseModel):
+    field: str
+    extracted_value: str
+    semantic_region: str
+    bbox: Optional[BoundingBox] = None
+    ocr_confidence: float = 0.95
+    classification_confidence: float = 0.95
+    extraction_confidence: float = 0.95
+    status: str = "DETECTED"  # DETECTED, NOT_DETECTED, NOT_APPLICABLE, UNCERTAIN, CONFLICT
+
+class LmCompassComplianceItem(BaseModel):
+    rule: str
+    requirement: str
+    evidence: str
+    bbox: Optional[BoundingBox] = None
+    status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW, NOT_APPLICABLE
+    confidence: float = 0.95
+
+class LmCompassViolationItem(BaseModel):
+    violation: str
+    rule: str
+    evidence_text: str
+    evidence_bbox: Optional[BoundingBox] = None
+    explanation: str
+    confidence: float = 0.95
+
+class LmCompassNeedsReviewItem(BaseModel):
+    uncertain_field: str
+    reason: str
+    bbox: Optional[BoundingBox] = None
+    suggested_action: str
+
+class LmCompassResult(BaseModel):
+    product_name: str
+    category: str
+    classification_status: str = "COMPLETED"  # COMPLETED, NEEDS_REVIEW
+    panels: List[str] = Field(default_factory=list)
+    fields: List[LmCompassFieldItem] = Field(default_factory=list)
+    compliance: List[LmCompassComplianceItem] = Field(default_factory=list)
+    violations: List[LmCompassViolationItem] = Field(default_factory=list)
+    needs_review: List[LmCompassNeedsReviewItem] = Field(default_factory=list)
+    overall_status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW
+    overall_confidence: float = 0.95
+
 
 # ----------------------------------------------------
 # STAGE 4: PIPELINE REQUEST / RESPONSE & BENCHMARK MODELS
@@ -299,6 +476,7 @@ class ScanProcessResponse(BaseModel):
     measurement_validation: Optional[MeasurementValidation] = None
     labelme_annotation: Optional[LabelMeAnnotation] = None
     external_verification: str = "External verification: Not available"
+    lm_compass_result: Optional[LmCompassResult] = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class BenchmarkEvaluationMetric(BaseModel):
