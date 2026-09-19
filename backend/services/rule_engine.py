@@ -272,6 +272,10 @@ def evaluate_legal_metrology_rules(
     # RULE 6(1)(d): Month and Year of Manufacture or Pre-packing
     # ----------------------------------------------------
     mfd = data.mfd
+    pkd_val = data.dates.get("pkd") if (data.dates and isinstance(data.dates, dict)) else getattr(data, "packing_date", None)
+    if pkd_val in ["Not detected", "Not Applicable", ""]:
+        pkd_val = None
+
     if is_micro_exempt:
         mfd_status = "NOT APPLICABLE"
         mfd_finding = "Statutorily exempt under Rule 26(a) for small packages <= 10g/ml"
@@ -279,6 +283,10 @@ def evaluate_legal_metrology_rules(
     elif mfd.is_uncertain:
         mfd_status = "NEEDS REVIEW"
         mfd_finding = f"Inkjet / date stamp smeared or partially illegible: '{mfd.raw_text}'. Flagged for inspector verification."
+        mfd_penal = None
+    elif pkd_val:
+        mfd_status = "PASS"
+        mfd_finding = f"Pre-packing date declared under Rule 6(1)(d): {pkd_val}"
         mfd_penal = None
     elif mfd.raw_text in ["", "Not detected"]:
         if is_image_degraded:

@@ -126,6 +126,9 @@ class CanonicalField(BaseModel):
     evidence_crop_base64: Optional[str] = None
     confidence_level: Optional[str] = None  # 'High', 'Medium', 'Low', 'Needs Review'
     review_reason: Optional[str] = None
+    assignment_reasoning: Optional[str] = None
+    surrounding_context: Optional[str] = None
+    semantic_class: Optional[str] = None
 
 class AddressInfo(BaseModel):
     name: str = ""
@@ -212,6 +215,10 @@ class FieldEvidence(BaseModel):
     rule_reference: Optional[str] = None
     review_reason: Optional[str] = None
     notes: Optional[str] = None
+    assignment_reasoning: Optional[str] = None
+    surrounding_context: Optional[str] = None
+    semantic_class: Optional[str] = None
+    raw_ocr: Optional[str] = None
 
 class StructuredProductData(BaseModel):
     product_name: str = ""

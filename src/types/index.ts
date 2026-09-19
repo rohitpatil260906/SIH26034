@@ -136,6 +136,10 @@ export interface FieldEvidence {
   rule_reference?: string;
   review_reason?: string;
   notes?: string;
+  assignment_reasoning?: string;
+  surrounding_context?: string[];
+  semantic_class?: string;
+  raw_ocr?: string;
 }
 
 export interface StructuredProductData {
@@ -239,6 +243,9 @@ export interface CanonicalField {
   confidence_level?: string;
   review_reason?: string;
   crop_base64?: string;
+  assignment_reasoning?: string;
+  surrounding_context?: string[];
+  semantic_class?: string;
 }
 
 export interface ComplianceCheckItem {
