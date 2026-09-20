@@ -20,10 +20,25 @@ from .models import (
     MeasurementValidation,
     BenchmarkEvaluationResponse,
     SystemDiagnosticStatus,
+<<<<<<< HEAD
     JurisdictionInfo,
     UnitSalePriceInfo,
     CanonicalField
+=======
+    LmCompassResult,
+    UniversalFieldObject,
+    Stage1Response,
+    Stage2Response,
+    Stage3Response,
+    Stage4Response,
+    Stage5Response
+>>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
 )
+from .services.stage1_cv import Stage1Pipeline
+from .services.stage2_ocr import Stage2Pipeline
+from .services.stage3_semantic import Stage3Pipeline
+from .services.stage4_identity import Stage4Pipeline
+from .services.stage5_recovery import Stage5Pipeline
 from .services.cv_pipeline import (
     decode_base64_image,
     store_original_evidence,
@@ -42,9 +57,13 @@ from .services.ocr_engine import (
     TESSERACT_AVAILABLE,
     get_easyocr_reader
 )
+<<<<<<< HEAD
 from .services.text_processor import process_and_classify_text
 from .services.llm_extractor import get_ai_provider
 from .services.ml_service import ml_service
+=======
+from .services.text_processor import process_and_classify_text, build_lm_compass_dossier
+>>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
 from .services.rule_engine import (
     evaluate_legal_metrology_rules,
     load_statutory_rules_library
@@ -130,6 +149,167 @@ def get_system_diagnostics():
         external_government_api="External verification: Not available"
     )
 
+# Stage 1 Production Pipeline Instance
+stage1_pipeline = Stage1Pipeline()
+
+@app.post("/api/scan/stage1/ingest", response_model=Stage1Response)
+async def stage1_ingest_image(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 1: Image Ingestion, 18-Dimension Quality Analysis, and Package Localization.
+    Accepts multipart file upload or form-encoded base64 string.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage1_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage1_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage1/ingest-json", response_model=Stage1Response)
+def stage1_ingest_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 1 image processing."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage1_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 2 Universal Text Detection Pipeline Instance
+stage2_pipeline = Stage2Pipeline()
+
+@app.post("/api/scan/stage2/detect-text", response_model=Stage2Response)
+async def stage2_detect_text(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 2: Universal Text Detection + Advanced OCR Engine.
+    Detects all visible text regions, performs multi-pass ensemble, detects tables & barcodes.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage2_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage2_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage2/detect-text-json", response_model=Stage2Response)
+def stage2_detect_text_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 2 text detection."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage2_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 3 Production Pipeline Instance
+stage3_pipeline = Stage3Pipeline()
+
+@app.post("/api/scan/stage3/understand", response_model=Stage3Response)
+async def stage3_understand_text(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 3: Universal Text Meaning + Semantic Understanding Engine.
+    Interprets raw/normalized OCR into contextual, evidence-backed semantic fields.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage3_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage3_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage3/understand-json", response_model=Stage3Response)
+def stage3_understand_text_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 3 semantic understanding from base64 image or Stage 2 output."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage3_pipeline.process_base64_image(data, filename=filename, source=source)
+
+# Stage 4 Production Pipeline Instance
+stage4_pipeline = Stage4Pipeline()
+
+@app.post("/api/scan/stage4/identify", response_model=Stage4Response)
+async def stage4_identify_entity(
+    file: Optional[UploadFile] = File(None),
+    data: Optional[str] = Form(None),
+    filename: Optional[str] = Form("package.jpg"),
+    source: Optional[str] = Form("upload")
+):
+    """
+    Stage 4: Universal Product + Company + Entity Identification from Any Panel.
+    Identifies Brand, Product Name, Category, Variant, Model, SKU, Batch, Country of Origin,
+    and all Commercial Entities (Manufacturer, Packer, Marketer, Importer) with address linking.
+    """
+    if file is not None:
+        content = await file.read()
+        return stage4_pipeline.process_image_bytes(
+            content,
+            filename=file.filename or filename or "package.jpg",
+            source=source or "upload"
+        )
+    elif data:
+        return stage4_pipeline.process_base64_image(
+            data,
+            filename=filename or "package.jpg",
+            source=source or "upload"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="No image file or base64 data provided.")
+
+@app.post("/api/scan/stage4/identify-json", response_model=Stage4Response)
+def stage4_identify_entity_json(payload: Dict[str, Any]):
+    """JSON endpoint for Stage 4 identity resolution from base64 image or Stage 3 output."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    source = payload.get("source", "upload")
+    return stage4_pipeline.process_base64_image(data, filename=filename, source=source)
+
 @app.post("/api/scan/quality", response_model=ImageQualityMetrics)
 def check_image_quality(payload: Dict[str, str]):
     """Analyzes image quality across the 12 optical and statutory assessment checks."""
@@ -176,6 +356,54 @@ def detect_packaging_regions(payload: Dict[str, str]):
         }
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Region detection error: {str(e)}")
+
+@app.post("/api/scan/semantic-fields")
+def analyze_semantic_fields(payload: Dict[str, Any]):
+    """Analyzes text through the Universal Field Semantic Understanding Engine (18-Service Pipeline),
+    resolving raw tokens (e.g. '50 g', '₹299') into UniversalFieldObjects with full explainability dossiers.
+    """
+    from .services.semantic_engine import get_universal_pipeline
+    from .models import ExtractedLine
+
+    text_content = payload.get("text", "")
+    surface = payload.get("surface", "Front (PDP)")
+    image_data = payload.get("data")
+
+    pil_img = None
+    if image_data and len(image_data) > 50:
+        try:
+            pil_img = decode_base64_image(image_data)
+        except Exception:
+            pass
+
+    if not text_content and pil_img:
+        # Run OCR ensemble
+        pipeline = get_universal_pipeline()
+        variants = pipeline.preprocessing_service.generate_variants(pil_img, include_base64=False)
+        extracted_lines, raw_transcript = pipeline.ocr_ensemble_service.run_ensemble(pil_img, variants, surface)
+    elif text_content:
+        raw_transcript = text_content
+        lines_raw = text_content.split("\n")
+        extracted_lines = [
+            ExtractedLine(line_index=i + 1, text=l.strip(), confidence=0.95, surface=surface)
+            for i, l in enumerate(lines_raw) if l.strip()
+        ]
+    else:
+        raise HTTPException(status_code=400, detail="Either 'text' or 'data' (image base64) must be provided.")
+
+    pipeline = get_universal_pipeline()
+    u_fields, dossiers = pipeline.process_surface_text(
+        lines=extracted_lines,
+        raw_transcript=raw_transcript,
+        surface=surface,
+        image=pil_img
+    )
+
+    return {
+        "surface": surface,
+        "universal_fields": [f.dict() for f in u_fields],
+        "dossiers": [d.to_dict() for d in dossiers]
+    }
 
 @app.post("/api/scan/process", response_model=ScanProcessResponse)
 def process_scan(request: ScanProcessRequest):
@@ -313,7 +541,19 @@ def process_scan(request: ScanProcessRequest):
     compliance_checks, compliance_score, overall_status = evaluate_legal_metrology_rules(
         product_data,
         surface=surface,
-        is_image_degraded=is_degraded
+        is_image_degraded=is_degraded,
+        surfaces_processed=surfaces_processed
+    )
+
+    # ----------------------------------------------------
+    # STAGE 3.11: LM-COMPASS STRUCTURED COMPLIANCE DOSSIER
+    # ----------------------------------------------------
+    lm_compass = build_lm_compass_dossier(
+        product_data,
+        canonical_fields,
+        evidence_map,
+        compliance_checks,
+        surfaces_processed
     )
 
     # External Verification Abstraction
@@ -342,7 +582,12 @@ def process_scan(request: ScanProcessRequest):
         measurement_validation=measurement_val,
         labelme_annotation=labelme_ann,
         external_verification=ext_verif,
+<<<<<<< HEAD
         jurisdiction=req_jurisdiction,
+=======
+        lm_compass_result=lm_compass,
+        universal_fields=product_data.universal_fields,
+>>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
         timestamp=datetime.utcnow().isoformat()
     )
 
@@ -369,6 +614,17 @@ def process_scan(request: ScanProcessRequest):
         print(f"Database save note: {db_err}")
 
     return response
+
+@app.post("/api/scan/lm-compass", response_model=LmCompassResult)
+async def scan_lm_compass(request: ScanProcessRequest):
+    """LM-COMPASS: Universal Packaged Commodity Compliance Vision Engine
+    Executes product-adaptive CV + OCR + semantic understanding + compliance validation
+    and returns the Section 27 Structured Compliance Dossier.
+    """
+    res = await process_scan(request)
+    if not res.lm_compass_result:
+        raise HTTPException(status_code=500, detail="Failed to synthesize LM-Compass compliance dossier")
+    return res.lm_compass_result
 
 @app.get("/api/scan/{scan_id}", response_model=ScanProcessResponse)
 def get_scan(scan_id: str):
@@ -398,6 +654,7 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         
     # Generate on-the-fly standard packaging docket for historical/sample IDs
     prod_data = StructuredProductData(
+<<<<<<< HEAD
         product_name="Lakmé Sun Expert Aqua Sun Gel SPF 50",
         commodity_name="Sunscreen Gel (Cosmetic)",
         manufacturer={"name": "Aero Care Personal Products LLP", "full_address": "Survey 284/2, Naroli, D&NH - 396235", "pin_code": "396235"},
@@ -407,16 +664,36 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         dates={"mfd": "02/2026", "expiry": "01/2028"},
         batch_number="B-LK2026",
         consumer_care={"phone": "1800-10-22-221", "email": "lever.care@unilever.com"}
+=======
+        product_name="Standard Pre-Packaged Commodity",
+        commodity_name="Packaged Retail Commodity",
+        manufacturer=AddressInfo(name="Registered Commodity Packer Ltd", full_address="Plot 12, Phase 1, Industrial Area, Gurugram, Haryana - 122001", pin_code="122001", has_valid_pin=True),
+        net_quantity=NetQuantityInfo(value=500.0, unit="g", raw_text="Net Qty: 500 g", complies_standard_units=True),
+        mrp=MrpInfo(amount=250.0, raw_text="₹ 250.00 (inclusive of all taxes)", tax_inclusive_statement_present=True, complies_tax_phrase=True),
+        unit_sale_price=UnitSalePriceInfo(raw_text="USP ₹0.50/g", value_per_unit="₹0.50/g", is_exempt=False),
+        mfd=DateInfo(raw_text="01/2026", month="01", year="2026"),
+        expiry=DateInfo(raw_text="01/2028", month="01", year="2028"),
+        batch="B-202601",
+        country_of_origin="India",
+        consumer_care=ConsumerCareInfo(phone="1800-11-4422", email="care@consumer-helpline.gov.in")
+>>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
     )
     checks, score, overall = evaluate_legal_metrology_rules(prod_data, "Front (PDP)", False)
     scan_resp = ScanProcessResponse(
         scan_id=scan_id,
         product_info=prod_data,
         canonical_fields=[
+<<<<<<< HEAD
             CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.product_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
             CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="50 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
             CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 499.00 (incl. of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
             CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value="Survey 284/2, Naroli, D&NH - 396235", confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
+=======
+            CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.commodity_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
+            CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="500 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
+            CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 250.00 (inclusive of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
+            CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value=prod_data.manufacturer.full_address, confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
+>>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
         ],
         compliance_checks=checks,
         compliance_score=score,
@@ -598,3 +875,144 @@ def download_statutory_docx(scan_id: str):
 def get_evaluation_benchmark():
     """Runs or retrieves the automated evaluation benchmark metrics across 16 packaging categories."""
     return run_system_evaluation_benchmark()
+
+# ==============================================================================
+# STAGE 8: VERIFIED LEGAL METROLOGY RULE ENGINE ENDPOINT
+# ==============================================================================
+
+from .models import Stage8Request, Stage8Response
+from .rules import Stage8RuleEngine
+
+stage8_rule_engine = Stage8RuleEngine()
+
+@app.post("/api/rules/evaluate", response_model=Stage8Response)
+def evaluate_rules_endpoint(request: Stage8Request):
+    """
+    Stage 8 API Endpoint: Evaluates statutory Legal Metrology rules against Stage 7 unified product evidence.
+    Does NOT generate Stage 9 violation reports.
+    """
+    if not request.unified_product:
+        raise HTTPException(status_code=400, detail="Missing unified_product in request")
+
+    products = [request.unified_product]
+    return stage8_rule_engine.evaluate_session(
+        session_id=request.session_id,
+        products=products,
+        rule_context=request.rule_context
+    )
+
+
+# ==============================================================================
+# STAGE 9: VIOLATION & EVIDENCE ENGINE ENDPOINT
+# ==============================================================================
+
+from .models import Stage9Request, Stage9Response
+from .violations import Stage9ViolationEngine
+
+stage9_violation_engine = Stage9ViolationEngine()
+
+@app.post("/api/violations/evaluate", response_model=Stage9Response)
+def evaluate_violations_endpoint(request: Stage9Request):
+    """
+    Stage 9 API Endpoint: Converts Stage 8 verified rule evaluations into structured,
+    auditable, evidence-backed violation records and review queue items.
+    Enforces 'No Evidence, No Violation' and strict verification gating.
+    Does NOT calculate penalties, compounding fees, or generate legal notices.
+    """
+    evals = request.product_evaluations or (request.stage8_response.product_evaluations if request.stage8_response else [])
+    if not evals:
+        raise HTTPException(status_code=400, detail="Missing product_evaluations or stage8_response in request")
+
+    return stage9_violation_engine.evaluate_session_violations(
+        session_id=request.session_id,
+        product_evaluations=evals
+    )
+
+
+# ==============================================================================
+# STAGE 10: MASTER PIPELINE ORCHESTRATION ENDPOINTS
+# ==============================================================================
+
+from .models import (
+    Stage10RunRequest,
+    Stage10RunResponse,
+    Stage10ScanStatusResponse,
+    Stage10FinalResult
+)
+from .pipeline import Stage10PipelineOrchestrator, EvidenceHighlighter
+
+stage10_orchestrator = Stage10PipelineOrchestrator()
+
+@app.post("/api/scans")
+def create_scan_session(payload: Optional[Dict[str, Any]] = None):
+    """Creates a new Stage 10 scan session docket."""
+    payload = payload or {}
+    session_id = payload.get("session_id")
+    scan_id = stage10_orchestrator.create_scan(session_id=session_id)
+    return {"scan_id": scan_id, "session_id": session_id or scan_id, "status": "CREATED"}
+
+@app.post("/api/scans/{scan_id}/images")
+def upload_scan_image(scan_id: str, payload: Dict[str, Any]):
+    """Registers an image with a scan session."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    panel = payload.get("panel", "FRONT")
+    source = payload.get("source", "upload")
+
+    try:
+        img_info = stage10_orchestrator.register_image(
+            scan_id=scan_id,
+            image_data=data,
+            filename=filename,
+            panel=panel,
+            source=source
+        )
+        return {"scan_id": scan_id, "image": img_info, "status": "IMAGE_RECEIVED"}
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/api/scans/{scan_id}/run", response_model=Stage10RunResponse)
+def run_scan_pipeline(scan_id: str, payload: Optional[Dict[str, Any]] = None):
+    """
+    Executes the complete 10-stage LM-COMPASS inspection pipeline:
+    STAGE 1 -> STAGE 5 -> STAGE 2 -> STAGE 3 -> STAGE 4 -> STAGE 6 -> STAGE 7 -> STAGE 8 -> STAGE 9 -> STAGE 10.
+    """
+    options = (payload or {}).get("options", {})
+    try:
+        return stage10_orchestrator.run_pipeline(scan_id, options=options)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline execution error: {str(e)}")
+
+@app.get("/api/scans/{scan_id}/status", response_model=Stage10ScanStatusResponse)
+def get_scan_pipeline_status(scan_id: str):
+    """Retrieves stage-level progress and operational audit trail for a scan session."""
+    try:
+        return stage10_orchestrator.get_scan_status(scan_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/scans/{scan_id}/results", response_model=List[Stage10FinalResult])
+def get_scan_final_results(scan_id: str):
+    """Retrieves Stage 10 unified final results for a scan session."""
+    try:
+        return stage10_orchestrator.get_final_results(scan_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/scans/{scan_id}/evidence/{evidence_id}")
+def get_scan_evidence_view(scan_id: str, evidence_id: str):
+    """Retrieves non-destructive highlighted evidence details."""
+    try:
+        results = stage10_orchestrator.get_final_results(scan_id)
+        for res in results:
+            for ev in res.evidence:
+                if ev.region_id == evidence_id or ev.image_id == evidence_id:
+                    return ev
+        raise HTTPException(status_code=404, detail=f"Evidence ID '{evidence_id}' not found")
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+

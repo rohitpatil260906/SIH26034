@@ -40,6 +40,10 @@ export interface ExtractedDeclaration {
   officerStatus: 'Verified' | 'Edited' | 'Flagged' | 'Pending';
   correctionNotes?: string;
   boundingBox?: BoundingBox;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
 }
 
 export interface InspectionViolation {
@@ -57,6 +61,12 @@ export interface InspectionViolation {
   officerComments?: string;
   recommendedPenalty: string;
   reportedDate: string;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  expectedRequirement?: string;
+  detectedText?: string;
 }
 
 export interface InspectionImage {
@@ -79,6 +89,154 @@ export interface ExtractedLabelLine {
   status: 'Compliant' | 'Non-Compliant' | 'Under Review' | 'Informational';
   finding?: string;
   penalRef?: string;
+}
+
+export type ProductCategory =
+  | 'Category A — Food & Food Products'
+  | 'Category B — Beverages & Bottled Liquids'
+  | 'Category C — Cosmetics & Personal Care'
+  | 'Category D — Cleaning, Detergents & Household Care'
+  | 'Category E — Pharmaceuticals, Medical Devices & Healthcare'
+  | 'Category F — Electronics, Electrical Appliances & IT Goods'
+  | 'Category G — Stationery, Paper, Office & School Supplies'
+  | 'Category H — Toys, Baby Gear & Infant Products'
+  | 'Category I — Textiles, Apparel, Footwear & Accessories'
+  | 'Category J — Hardware, Construction, Paint & Tools'
+  | 'Category K — Automotive Parts, Lubricants & Accessories'
+  | 'Category L — Agricultural, Seeds, Fertilizers & Pesticides'
+  | 'Category M — Pet Food & Animal Care Products'
+  | 'Category N — Tobacco, Pan Masala & Related Commodities'
+  | 'Category O — Industrial Raw Materials & Bulk Packaged Commodities'
+  | 'Category P — Imported Commodities (Special Provisions)'
+  | 'Category Q — E-Commerce / Outer Delivery Packages'
+  | 'Category R — Unknown / Uncertain / Ambiguous Commodity';
+
+export type SemanticRegionType =
+  | 'DIRECTIONS'
+  | 'INGREDIENTS'
+  | 'POSSIBLE_INGREDIENTS'
+  | 'WARNING'
+  | 'MARKETER'
+  | 'MARKETER_ADDRESS'
+  | 'MANUFACTURER'
+  | 'MANUFACTURER_ADDRESS'
+  | 'PACKER'
+  | 'PACKER_ADDRESS'
+  | 'IMPORTER'
+  | 'IMPORTER_ADDRESS'
+  | 'POSTAL_PIN'
+  | 'MRP'
+  | 'NET_QUANTITY'
+  | 'UNIT_SALE_PRICE'
+  | 'CONSUMER_CARE'
+  | 'CONSUMER_CARE_EMAIL'
+  | 'CONSUMER_CARE_PHONE'
+  | 'CONSUMER_CARE_ADDRESS'
+  | 'COUNTRY_OF_ORIGIN'
+  | 'DATE_MANUFACTURE'
+  | 'DATE_EXPIRY'
+  | 'DATE_BEST_BEFORE'
+  | 'BATCH_LOT'
+  | 'GENERIC_COMMODITY_NAME'
+  | 'BRAND_IDENTITY'
+  | 'BARCODE'
+  | 'FSSAI_LICENSE'
+  | 'NUTRITIONAL_INFO'
+  | 'STORAGE_INSTRUCTIONS'
+  | 'DISPOSAL_RECYCLING'
+  | 'ECO_GREEN_DOT'
+  | 'RED_BROWN_NON_VEG_DOT'
+  | 'CERTIFICATION_MARK'
+  | 'MARKETING_CLAIM'
+  | 'GENERIC_ADDRESS'
+  | 'OTHER_TEXT';
+
+export interface MultiTierConfidence {
+  image_quality_confidence: number;
+  ocr_confidence: number;
+  classification_confidence: number;
+  extraction_confidence: number;
+  rule_validation_confidence: number;
+  overall_confidence: number;
+}
+
+export interface LmCompassFieldItem {
+  field_name: string;
+  display_name: string;
+  status: 'FOUND' | 'MISSING' | 'AMBIGUOUS' | 'NOT_APPLICABLE' | 'CONFLICT';
+  extracted_value?: string;
+  surface?: string;
+  bounding_box?: BoundingBox;
+  confidence: number;
+  statutory_basis?: string;
+}
+
+export interface LmCompassComplianceItem {
+  rule_id: string;
+  statutory_citation: string;
+  requirement_title: string;
+  status: 'COMPLIANT' | 'NON_COMPLIANT' | 'NEEDS_REVIEW' | 'NOT_APPLICABLE';
+  evidence_field?: string;
+  evidence_value?: string;
+  evidence_surface?: string;
+  evidence_bbox?: BoundingBox;
+  evidence_text?: string;
+  confidence: number;
+  notes?: string;
+}
+
+export interface LmCompassViolationItem {
+  rule_id: string;
+  statutory_citation: string;
+  violation_title: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  legal_reasoning: string;
+  prescribed_requirement: string;
+  detected_defect: string;
+  exact_evidence_bbox: BoundingBox;
+  exact_evidence_text: string;
+  evidence_surface: string;
+  penal_provision: string;
+  statutory_fine: string;
+  remedial_action: string;
+}
+
+export interface LmCompassNeedsReviewItem {
+  rule_id: string;
+  statutory_citation: string;
+  review_title: string;
+  reason: string;
+  suggested_officer_action: string;
+  evidence_surface?: string;
+  detected_text?: string;
+}
+
+export interface LmCompassResult {
+  product_understanding: {
+    category_name: string;
+    category_code: string;
+    classification_status: string;
+    detected_commodity?: string;
+    is_imported: boolean;
+    is_multipack: boolean;
+    is_liquid: boolean;
+    has_primary_display_panel: boolean;
+    total_surfaces_analyzed: number;
+    surfaces_detected: string[];
+    confidence_score: number;
+  };
+  declared_fields: LmCompassFieldItem[];
+  compliance_matrix: LmCompassComplianceItem[];
+  violations: LmCompassViolationItem[];
+  needs_review: LmCompassNeedsReviewItem[];
+  duplicate_consistency: {
+    net_quantity_consistency: string;
+    mrp_consistency: string;
+    notes?: string;
+  };
+  multi_tier_confidence: MultiTierConfidence;
+  overall_status: 'COMPLIANT' | 'NON_COMPLIANT' | 'NEEDS_REVIEW';
+  summary_rationale: string;
 }
 
 export type ProductTypeCategory =
@@ -127,6 +285,14 @@ export interface FieldEvidence {
   rule_reference?: string;
   review_reason?: string;
   notes?: string;
+  assignment_reasoning?: string;
+  surrounding_context?: string[];
+  semantic_class?: string;
+  raw_ocr?: string;
+  image_quality_confidence?: number;
+  ocr_confidence?: number;
+  classification_confidence?: number;
+  extraction_confidence?: number;
 }
 
 export interface StructuredProductData {
@@ -139,6 +305,8 @@ export interface StructuredProductData {
   product_variant?: string;
   category?: string;
   product_category?: string;
+  category_code?: string;
+  classification_status?: string;
 
   // 6-12: Responsible Entities
   manufacturer_name?: string;
@@ -160,6 +328,13 @@ export interface StructuredProductData {
     name: string;
     address: string;
   };
+  marketer_name?: string;
+  marketer_address?: string;
+  marketer?: {
+    name: string;
+    address: string;
+    pin_code?: string;
+  };
   brand_owner_info?: string;
 
   // 13: Country of Origin
@@ -173,6 +348,7 @@ export interface StructuredProductData {
   quantity_per_package?: string;
   total_multipack_quantity?: string;
   unit_of_measurement?: string;
+  units?: string;
 
   // 21-23: Price Information
   mrp: string;
@@ -184,7 +360,9 @@ export interface StructuredProductData {
   packing_date: string;
   import_date: string;
   best_before?: string;
+  best_before_date?: string;
   use_by_expiry?: string;
+  expiry_date?: string;
   expiry_or_best_before: string;
 
   // 29-31: Batch Identification
@@ -207,6 +385,12 @@ export interface StructuredProductData {
   package_dimensions?: string;
   other_declarations: string[];
 
+  // Additional Semantic Text Preservations
+  directions_text?: string;
+  ingredients_text?: string;
+  warnings_text?: string;
+  postal_pin?: string;
+
   // Full raw unmapped text preserved verbatim
   other_text?: string;
   classification?: ProductClassification;
@@ -219,10 +403,17 @@ export interface CanonicalField {
   value: string;
   confidence: number;
   source: string;
-  status: 'Detected' | 'Not Detected' | 'Unreadable' | 'Missing';
+  status: 'Detected' | 'Not Detected' | 'Unreadable' | 'Missing' | 'Defective' | 'Needs Review' | 'Not Applicable' | string;
   bbox?: BoundingBox;
   imageNumber?: number;
   surface?: SurfaceType;
+  raw_ocr_value?: string;
+  confidence_level?: string;
+  review_reason?: string;
+  crop_base64?: string;
+  assignment_reasoning?: string;
+  surrounding_context?: string[];
+  semantic_class?: string;
 }
 
 export interface ComplianceCheckItem {
@@ -241,6 +432,11 @@ export interface ComplianceCheckItem {
   evidenceSurface?: SurfaceType;
   reason?: string;
   penalRef?: string;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  originalText?: string;
 }
 
 export interface Jurisdiction {
@@ -296,6 +492,7 @@ export interface InspectionRecord {
   finalDecision: 'Accepted' | 'Notice Issued' | 'Pending Hearing' | 'Exempt' | 'Draft';
   qrVerificationHash: string;
   statutoryReference: string;
+  lmCompassResult?: LmCompassResult;
 }
 
 export interface ProductItem {
@@ -328,6 +525,11 @@ export interface LegalRuleItem {
   lastUpdated: string;
   officerGuidance: string;
   fontTable?: Array<{ area: string; minHeightNormal: string; minHeightBlowMoulded: string }>;
+  sourcePdf?: string;
+  sourcePdfPage?: number;
+  amendmentCitation?: string;
+  effectiveDate?: string;
+  originalText?: string;
 }
 
 export interface AuditLogItem {

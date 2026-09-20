@@ -19,7 +19,7 @@ import numpy as np
 import cv2
 
 # Ensure backend directory is in python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient
 from backend.main import app
@@ -108,10 +108,34 @@ def test_pipeline():
 
     assert scan_id is not None
     assert len(scan_data.get("detected_regions", [])) > 0
-    assert len(scan_data.get("compliance_checks", [])) >= 34
+    checks = scan_data.get("compliance_checks", [])
+    assert len(checks) >= 34
 
-    # 3. Test LabelMe v5.2.1 Export
-    print(f"\n[3] Fetching LabelMe v5.2.1 JSON (/api/scan/{scan_id}/labelme)...")
+    # Verify Legal Metrology Knowledge Base Gazette Citations & Category Filtering
+    print("\n[2b] Verifying Legal Metrology Rule Knowledge Base Source-of-Truth Citations...")
+    checks_with_source_pdf = [c for c in checks if c.get("source_pdf")]
+    print(f" -> Checks linked to Gazette Source PDFs: {len(checks_with_source_pdf)} / {len(checks)}")
+    assert len(checks_with_source_pdf) >= 20, "Expected checks to be linked to original Gazette source PDFs"
+
+    for c in checks_with_source_pdf[:5]:
+        print(f"    * {c.get('rule_no')}: {c.get('source_pdf')} (p. {c.get('source_pdf_page')}) [{c.get('status')}]")
+        assert c.get("source_pdf").endswith(".pdf"), f"Invalid source PDF filename: {c.get('source_pdf')}"
+        assert isinstance(c.get("source_pdf_page"), int) and c.get("source_pdf_page") >= 1
+
+    # Verify Category-Specific Applicability:
+    # AMRUT TEA is Food -> Rule 26(e) (Garments Sizing in metric cm/m) must be NOT APPLICABLE
+    garment_checks = [c for c in checks if "26(e)" in c.get("rule_no") or "Garment" in c.get("rule_title", "")]
+    if garment_checks:
+        print(f" -> Garment Sizing Rule 26(e) for Food commodity: status={garment_checks[0].get('status')}, applicable={garment_checks[0].get('is_applicable')}")
+        assert garment_checks[0].get("is_applicable") is False or garment_checks[0].get("status") == "NOT APPLICABLE"
+        print(" -> Dynamic commodity category filtering verified: Rule 26(e) not applied to tea!")
+
+    # Verify Electronics QR Proviso:
+    elec_checks = [c for c in checks if "Electronics" in c.get("rule_title", "")]
+    if elec_checks:
+        print(f" -> Electronics QR Rule Proviso for Food commodity: status={elec_checks[0].get('status')}, applicable={elec_checks[0].get('is_applicable')}")
+        assert elec_checks[0].get("is_applicable") is False or elec_checks[0].get("status") == "NOT APPLICABLE"
+        print(" -> Dynamic commodity category filtering verified: Electronics QR proviso not applied to tea!")
     res = client.get(f"/api/scan/{scan_id}/labelme")
     assert res.status_code == 200, f"LabelMe export failed: {res.status_code}"
     labelme_data = res.json()

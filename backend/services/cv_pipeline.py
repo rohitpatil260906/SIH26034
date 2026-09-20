@@ -107,7 +107,22 @@ def store_original_evidence(
 # -------------------------------------------------------------------
 
 def analyze_complete_image_quality(pil_image: Image.Image) -> ImageQualityMetrics:
-    """Performs the 12 automated image quality assessments using OpenCV + NumPy + scikit-image."""
+    """Performs the 14 automated image quality assessments using OpenCV + NumPy + scikit-image:
+    1. Resolution (Megapixels)
+    2. Blur (Laplacian variance)
+    3. Focus (Sobel gradient energy / Tenengrad)
+    4. Brightness (Mean intensity)
+    5. Contrast (Standard deviation)
+    6. Noise (Residual variance after median smoothing)
+    7. Glare / Specular reflection
+    8. Shadow / Non-uniform illumination
+    9. Skew angle (Hough line angles)
+    10. Rotation orientation
+    11. Perspective distortion (Quadrilateral homography test)
+    12. Estimated text size (Connected component median glyph height)
+    13. Text visibility score
+    14. Image completeness (Package boundary edge clipping)
+    """
     cv_img = pil_to_cv2(pil_image)
     h, w = cv_img.shape[:2]
     gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
@@ -118,28 +133,37 @@ def analyze_complete_image_quality(pil_image: Image.Image) -> ImageQualityMetric
     blur_var = float(np.var(laplacian))
     is_blurred = blur_var < 100.0
     
-    # 2. Noise estimation (residual difference after median blur)
+    # 2. Focus score (Tenengrad focus measure / gradient energy)
+    sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    grad_mag = np.sqrt(sobel_x**2 + sobel_y**2)
+    tenengrad = float(np.mean(grad_mag**2))
+    focus_score = round(min(100.0, max(10.0, (tenengrad / 1200.0) * 85.0)), 1)
+    
+    # 3. Noise estimation (residual difference after median blur)
     denoised_est = cv2.medianBlur(gray, 3)
     noise_residual = cv2.absdiff(gray, denoised_est)
     noise_var = float(np.var(noise_residual))
     is_noisy = noise_var > 65.0
     
-    # 3. Brightness analysis
+    # 4. Brightness analysis
     mean_brightness = float(np.mean(gray))
     
-    # 4. Contrast analysis (Standard deviation)
+    # 5. Contrast analysis (Standard deviation)
     contrast_std = float(np.std(gray))
     
-    # 5. Glare / reflection detection (saturated pixels > 245 with low local gradient)
+    # 6. Glare / reflection detection (saturated pixels > 245 with low local gradient)
     bright_mask = gray > 245
-    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-    grad_mag = np.sqrt(sobelx**2 + sobely**2)
     glare_mask = bright_mask & (grad_mag < 25.0)
     glare_pct = round(float(np.sum(glare_mask) / (w * h)) * 100.0, 2)
     is_glare_detected = glare_pct > 2.5
     
-    # 6. Skew & Orientation estimation (Hough line angles)
+    # 7. Shadow detection (deep shadow regions < 40 intensity occupying > 5% area)
+    shadow_mask = gray < 45
+    shadow_pct = round(float(np.sum(shadow_mask) / (w * h)) * 100.0, 2)
+    shadow_detected = shadow_pct > 6.0 and abs(mean_brightness - 140.0) > 30.0
+    
+    # 8. Skew & Orientation estimation (Hough line angles)
     edges = cv2.Canny(gray, 50, 150, apertureSize=3)
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80, minLineLength=max(30, w // 20), maxLineGap=10)
     skew_angle = 0.0
@@ -156,12 +180,12 @@ def analyze_complete_image_quality(pil_image: Image.Image) -> ImageQualityMetric
         if angles:
             skew_angle = round(float(np.median(angles)), 2)
             
-    # 7. Rotation detection
+    # 9. Rotation detection
     rotation_angle = 0.0
     if abs(skew_angle) > 1.0:
         rotation_angle = skew_angle
         
-    # 8. Perspective distortion detection (ratio of contour bounding box)
+    # 10. Perspective distortion detection (ratio of contour bounding box)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     perspective_distortion = False
     if contours:
@@ -170,21 +194,31 @@ def analyze_complete_image_quality(pil_image: Image.Image) -> ImageQualityMetric
             peri = cv2.arcLength(largest_c, True)
             approx = cv2.approxPolyDP(largest_c, 0.04 * peri, True)
             if len(approx) == 4:
-                # Check trapezoidal difference
                 pts = approx.reshape(4, 2)
                 d1 = np.linalg.norm(pts[0] - pts[1])
                 d2 = np.linalg.norm(pts[2] - pts[3])
                 if max(d1, d2) > 0 and (abs(d1 - d2) / max(d1, d2)) > 0.20:
                     perspective_distortion = True
 
-    # 9. Background interference detection
-    # High frequency edge density in non-text areas
+    # 11. Background interference detection
     edge_density = float(np.mean(edges > 0))
     bg_interference_score = round(min(100.0, edge_density * 300.0), 1)
 
-    # 10. Text visibility estimation
-    # Sobel gradient concentration in plausible horizontal text frequency bands
-    text_vis_score = min(100.0, (contrast_std / 55.0) * 60.0 + (blur_var / 200.0) * 40.0)
+    # 12. Estimated text size (Glyph median height via connected components)
+    _, bin_thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(bin_thresh, connectivity=8)
+    glyph_heights = []
+    for i in range(1, n_labels):
+        cw = stats[i, cv2.CC_STAT_WIDTH]
+        ch = stats[i, cv2.CC_STAT_HEIGHT]
+        area = stats[i, cv2.CC_STAT_AREA]
+        # Filter typical text characters (height 6px to 120px, reasonable aspect ratio)
+        if 6 <= ch <= 120 and 4 <= cw <= 120 and 15 <= area <= 6000:
+            glyph_heights.append(ch)
+    est_text_size = round(float(np.median(glyph_heights)), 1) if glyph_heights else 14.0
+
+    # 13. Text visibility estimation
+    text_vis_score = min(100.0, (contrast_std / 55.0) * 50.0 + (blur_var / 200.0) * 35.0 + (focus_score / 100.0) * 15.0)
     if text_vis_score >= 75 and not is_blurred:
         text_visibility = "Optimal - High contrast and sharp text boundaries"
     elif text_vis_score >= 50:
@@ -192,48 +226,71 @@ def analyze_complete_image_quality(pil_image: Image.Image) -> ImageQualityMetric
     else:
         text_visibility = "Degraded - Blur, uneven lighting or low contrast detected"
 
-    # 11 & 12. Overall quality score (0-100) & advisory
-    # Sharpness: max 35 pts
-    sharp_pts = min(35.0, (blur_var / 150.0) * 35.0)
-    # Brightness: max 25 pts (ideal 110-170)
+    # 14. Image completeness (detect whether package touches edge boundaries)
+    # If high edge activity directly touches outer 2% margin, package might be clipped
+    margin_top = np.mean(edges[:int(h * 0.02), :])
+    margin_bottom = np.mean(edges[int(h * 0.98):, :])
+    margin_left = np.mean(edges[:, :int(w * 0.02)])
+    margin_right = np.mean(edges[:, int(w * 0.98):])
+    is_clipped = max(margin_top, margin_bottom, margin_left, margin_right) > 35.0
+    image_completeness = "Border clipped - Secondary surfaces recommended" if is_clipped else "Complete packaging visible"
+
+    # Overall quality score (0-100) & advisory
+    # Sharpness: max 30 pts
+    sharp_pts = min(30.0, (blur_var / 150.0) * 30.0)
+    # Brightness: max 20 pts (ideal 110-170)
     b_dist = abs(mean_brightness - 140.0)
-    bright_pts = max(0.0, 25.0 - (b_dist / 140.0) * 25.0)
+    bright_pts = max(0.0, 20.0 - (b_dist / 140.0) * 20.0)
     # Contrast: max 20 pts (ideal std > 45)
     cont_pts = min(20.0, (contrast_std / 50.0) * 20.0)
-    # Resolution: max 10 pts (ideal > 1.5 MP)
-    res_pts = min(10.0, (megapixels / 1.5) * 10.0)
-    # Glare & noise deduction: max 10 pts
-    clean_pts = max(0.0, 10.0 - (glare_pct * 1.5) - (noise_var / 30.0))
+    # Resolution: max 15 pts (ideal > 1.5 MP)
+    res_pts = min(15.0, (megapixels / 1.5) * 15.0)
+    # Glare, shadow & noise deduction: max 15 pts
+    clean_pts = max(0.0, 15.0 - (glare_pct * 1.5) - (noise_var / 30.0) - (8.0 if shadow_detected else 0.0))
     
     overall = int(round(sharp_pts + bright_pts + cont_pts + res_pts + clean_pts))
     overall = max(15, min(99, overall))
     
     advisory = None
-    if overall < 65 or is_blurred or is_glare_detected:
+    if overall < 65 or is_blurred or is_glare_detected or shadow_detected or is_clipped:
         reasons = []
         if is_blurred: reasons.append("camera blur")
         if is_glare_detected: reasons.append(f"surface glare ({glare_pct}%)")
+        if shadow_detected: reasons.append("heavy shadows")
         if mean_brightness < 80: reasons.append("low lighting")
         if contrast_std < 30: reasons.append("low contrast")
-        advisory = f"Image quality is suboptimal ({', '.join(reasons)}). Multi-pass AI enhancement will be applied."
+        if is_clipped: reasons.append("package margins clipped")
+        advisory = f"Image quality is suboptimal ({', '.join(reasons)}). Multi-pass AI preprocessing will be applied."
+
+    margin_risk = "High" if is_clipped else ("Moderate" if max(margin_top, margin_bottom, margin_left, margin_right) > 20.0 else "Low")
 
     return ImageQualityMetrics(
         resolution_megapixels=megapixels,
         width=w,
         height=h,
+        resolution=f"{w}x{h}",
         blur_laplacian_variance=round(blur_var, 2),
         is_blurred=is_blurred,
+        focus_score=focus_score,
         noise_variance=round(noise_var, 2),
         is_noisy=is_noisy,
         mean_brightness=round(mean_brightness, 1),
+        brightness=round(mean_brightness, 1),
         contrast_std_dev=round(contrast_std, 1),
+        contrast=round(contrast_std, 1),
         glare_percentage=glare_pct,
         is_glare_detected=is_glare_detected,
+        shadow_detected=shadow_detected,
         rotation_angle_deg=rotation_angle,
         perspective_distortion_detected=perspective_distortion,
         skew_angle_deg=skew_angle,
+        skew_angle=skew_angle,
+        estimated_text_size_px=est_text_size,
+        estimated_glyph_height_px=est_text_size,
+        margin_clipping_risk=margin_risk,
         background_interference_score=bg_interference_score,
         text_visibility=text_visibility,
+        image_completeness=image_completeness,
         overall_quality_score=overall,
         advisory=advisory
     )
