@@ -23,12 +23,14 @@ from .models import (
     Stage1Response,
     Stage2Response,
     Stage3Response,
-    Stage4Response
+    Stage4Response,
+    Stage5Response
 )
 from .services.stage1_cv import Stage1Pipeline
 from .services.stage2_ocr import Stage2Pipeline
 from .services.stage3_semantic import Stage3Pipeline
 from .services.stage4_identity import Stage4Pipeline
+from .services.stage5_recovery import Stage5Pipeline
 from .services.cv_pipeline import (
     decode_base64_image,
     store_original_evidence,
@@ -782,3 +784,144 @@ def download_statutory_docx(scan_id: str):
 def get_evaluation_benchmark():
     """Runs or retrieves the automated evaluation benchmark metrics across 16 packaging categories."""
     return run_system_evaluation_benchmark()
+
+# ==============================================================================
+# STAGE 8: VERIFIED LEGAL METROLOGY RULE ENGINE ENDPOINT
+# ==============================================================================
+
+from .models import Stage8Request, Stage8Response
+from .rules import Stage8RuleEngine
+
+stage8_rule_engine = Stage8RuleEngine()
+
+@app.post("/api/rules/evaluate", response_model=Stage8Response)
+def evaluate_rules_endpoint(request: Stage8Request):
+    """
+    Stage 8 API Endpoint: Evaluates statutory Legal Metrology rules against Stage 7 unified product evidence.
+    Does NOT generate Stage 9 violation reports.
+    """
+    if not request.unified_product:
+        raise HTTPException(status_code=400, detail="Missing unified_product in request")
+
+    products = [request.unified_product]
+    return stage8_rule_engine.evaluate_session(
+        session_id=request.session_id,
+        products=products,
+        rule_context=request.rule_context
+    )
+
+
+# ==============================================================================
+# STAGE 9: VIOLATION & EVIDENCE ENGINE ENDPOINT
+# ==============================================================================
+
+from .models import Stage9Request, Stage9Response
+from .violations import Stage9ViolationEngine
+
+stage9_violation_engine = Stage9ViolationEngine()
+
+@app.post("/api/violations/evaluate", response_model=Stage9Response)
+def evaluate_violations_endpoint(request: Stage9Request):
+    """
+    Stage 9 API Endpoint: Converts Stage 8 verified rule evaluations into structured,
+    auditable, evidence-backed violation records and review queue items.
+    Enforces 'No Evidence, No Violation' and strict verification gating.
+    Does NOT calculate penalties, compounding fees, or generate legal notices.
+    """
+    evals = request.product_evaluations or (request.stage8_response.product_evaluations if request.stage8_response else [])
+    if not evals:
+        raise HTTPException(status_code=400, detail="Missing product_evaluations or stage8_response in request")
+
+    return stage9_violation_engine.evaluate_session_violations(
+        session_id=request.session_id,
+        product_evaluations=evals
+    )
+
+
+# ==============================================================================
+# STAGE 10: MASTER PIPELINE ORCHESTRATION ENDPOINTS
+# ==============================================================================
+
+from .models import (
+    Stage10RunRequest,
+    Stage10RunResponse,
+    Stage10ScanStatusResponse,
+    Stage10FinalResult
+)
+from .pipeline import Stage10PipelineOrchestrator, EvidenceHighlighter
+
+stage10_orchestrator = Stage10PipelineOrchestrator()
+
+@app.post("/api/scans")
+def create_scan_session(payload: Optional[Dict[str, Any]] = None):
+    """Creates a new Stage 10 scan session docket."""
+    payload = payload or {}
+    session_id = payload.get("session_id")
+    scan_id = stage10_orchestrator.create_scan(session_id=session_id)
+    return {"scan_id": scan_id, "session_id": session_id or scan_id, "status": "CREATED"}
+
+@app.post("/api/scans/{scan_id}/images")
+def upload_scan_image(scan_id: str, payload: Dict[str, Any]):
+    """Registers an image with a scan session."""
+    data = payload.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data' field with base64 image")
+    filename = payload.get("filename", "package.jpg")
+    panel = payload.get("panel", "FRONT")
+    source = payload.get("source", "upload")
+
+    try:
+        img_info = stage10_orchestrator.register_image(
+            scan_id=scan_id,
+            image_data=data,
+            filename=filename,
+            panel=panel,
+            source=source
+        )
+        return {"scan_id": scan_id, "image": img_info, "status": "IMAGE_RECEIVED"}
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/api/scans/{scan_id}/run", response_model=Stage10RunResponse)
+def run_scan_pipeline(scan_id: str, payload: Optional[Dict[str, Any]] = None):
+    """
+    Executes the complete 10-stage LM-COMPASS inspection pipeline:
+    STAGE 1 -> STAGE 5 -> STAGE 2 -> STAGE 3 -> STAGE 4 -> STAGE 6 -> STAGE 7 -> STAGE 8 -> STAGE 9 -> STAGE 10.
+    """
+    options = (payload or {}).get("options", {})
+    try:
+        return stage10_orchestrator.run_pipeline(scan_id, options=options)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline execution error: {str(e)}")
+
+@app.get("/api/scans/{scan_id}/status", response_model=Stage10ScanStatusResponse)
+def get_scan_pipeline_status(scan_id: str):
+    """Retrieves stage-level progress and operational audit trail for a scan session."""
+    try:
+        return stage10_orchestrator.get_scan_status(scan_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/scans/{scan_id}/results", response_model=List[Stage10FinalResult])
+def get_scan_final_results(scan_id: str):
+    """Retrieves Stage 10 unified final results for a scan session."""
+    try:
+        return stage10_orchestrator.get_final_results(scan_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/scans/{scan_id}/evidence/{evidence_id}")
+def get_scan_evidence_view(scan_id: str, evidence_id: str):
+    """Retrieves non-destructive highlighted evidence details."""
+    try:
+        results = stage10_orchestrator.get_final_results(scan_id)
+        for res in results:
+            for ev in res.evidence:
+                if ev.region_id == evidence_id or ev.image_id == evidence_id:
+                    return ev
+        raise HTTPException(status_code=404, detail=f"Evidence ID '{evidence_id}' not found")
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+

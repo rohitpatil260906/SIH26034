@@ -26,9 +26,10 @@ class MultiProductHandler:
             return [("product_001", [], [], [])]
 
         # 1. Check if Stage 1 explicitly segmented multiple packages
-        if stage1_output and stage1_output.packages and len(stage1_output.packages) > 1:
+        packages = getattr(stage1_output, "packages", None)
+        if stage1_output and packages and len(packages) > 1:
             partitions = []
-            for idx, pkg in enumerate(stage1_output.packages):
+            for idx, pkg in enumerate(packages):
                 pid = f"product_{idx+1:03d}"
                 px, py, pw, ph = pkg.bbox if pkg.bbox and len(pkg.bbox) == 4 else [0, 0, 9999, 9999]
                 

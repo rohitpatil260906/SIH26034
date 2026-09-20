@@ -166,6 +166,87 @@ class Stage2Pipeline:
         pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         return self.process_from_stage1(stage1_res, working_image=pil_img, original_image=pil_img)
 
+    def process_from_stage5(
+        self,
+        stage5_output: Any,
+        recovered_image: Image.Image,
+        original_image: Optional[Image.Image] = None,
+        stage1_output: Optional[Stage1Response] = None
+    ) -> Stage2Response:
+        """Executes Stage 2 using Stage 5 recovered image and consensus evidence."""
+        scan_id = stage5_output.scan_id.replace("STAGE5", "STAGE2")
+        orig_img = original_image or recovered_image
+        orig_w, orig_h = orig_img.size
+
+        # Convert Stage 5 consensus items to Stage 2 Text Regions
+        verified_regions: List[Stage2TextRegion] = []
+        uncertain_regions: List[Stage2TextRegion] = []
+
+        if getattr(stage5_output, "ocr_consensus", None):
+            for i, c in enumerate(stage5_output.ocr_consensus):
+                r = Stage2TextRegion(
+                    region_id=getattr(c, "consensus_id", f"REG-{i}").replace("CON-", "REG-"),
+                    raw_text=c.raw_text,
+                    normalized_text=c.normalized_text,
+                    bbox=c.processed_bbox if c.processed_bbox else c.original_bbox,
+                    original_bbox=c.original_bbox,
+                    detection_confidence=0.95,
+                    ocr_confidence=c.consensus_confidence,
+                    language="en",
+                    orientation=0,
+                    source_variant="stage5_consensus",
+                    status="DETECTED" if c.status == "CONFIRMED" else "OCR_UNCERTAIN",
+                    words=[],
+                    competing_candidates=c.competing_candidates,
+                    reading_order_index=i + 1
+                )
+                if r.status == "OCR_UNCERTAIN":
+                    uncertain_regions.append(r)
+                else:
+                    verified_regions.append(r)
+
+        # Also run table and barcode detection on recovered image
+        text_dicts = [
+            {"bbox": r.bbox, "raw_text": r.raw_text, "normalized_text": r.normalized_text}
+            for r in verified_regions
+        ]
+        tables = self.table_service.detect_tables(
+            image=recovered_image,
+            text_regions=text_dicts,
+            m_inv=None,
+            orig_w=orig_w,
+            orig_h=orig_h
+        )
+        barcodes, qr_codes = self.barcode_service.detect_barcodes_and_qr(
+            image=recovered_image,
+            m_inv=None,
+            orig_w=orig_w,
+            orig_h=orig_h
+        )
+
+        total_text_area = sum(r.bbox[2] * r.bbox[3] for r in verified_regions)
+        image_area = float(recovered_image.width * recovered_image.height + 1e-5)
+        coverage_pct = round(min(100.0, (total_text_area / image_area) * 100.0), 1)
+
+        status_msg = (
+            f"Stage 2 complete via Stage 5 recovery. Extracted {len(verified_regions)} text region(s), "
+            f"{len(uncertain_regions)} uncertain region(s), {len(tables)} table(s), "
+            f"{len(barcodes)} barcode(s), and {len(qr_codes)} QR code(s)."
+        )
+
+        return Stage2Response(
+            scan_id=scan_id,
+            text_detection_status="COMPLETED",
+            regions=verified_regions,
+            uncertain_regions=uncertain_regions,
+            barcode_regions=barcodes,
+            qr_regions=qr_codes,
+            tables=tables,
+            total_text_regions=len(verified_regions),
+            estimated_coverage_pct=coverage_pct,
+            message=status_msg
+        )
+
     def process_base64_image(
         self,
         base64_str: str,

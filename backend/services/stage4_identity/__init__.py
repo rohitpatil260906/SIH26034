@@ -61,8 +61,9 @@ class Stage4Pipeline:
         regions: List[Stage2TextRegion],
         stage1_output: Optional[Stage1Response] = None
     ) -> str:
-        """Determines panel source (FRONT, BACK, SIDE, etc.)."""
-        if stage1_output and stage1_output.panels:
+        if stage1_output and getattr(stage1_output, "panel", None):
+            return stage1_output.panel.type.upper()
+        if stage1_output and getattr(stage1_output, "panels", None) and stage1_output.panels:
             return stage1_output.panels[0].type.upper()
 
         all_text = " ".join((r.normalized_text or r.raw_text or "").lower() for r in regions)

@@ -897,4 +897,480 @@ class Stage4Response(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
+# ==============================================================================
+# STAGE 5: ADVANCED CURVED / DISTORTED LABEL RECOVERY & DIFFICULT IMAGE PROCESSING
+# ==============================================================================
+
+class Stage5TransformationStep(BaseModel):
+    operation: str  # perspective_homography, cylindrical_unwrap, rotate, crop, upscale, unsharp_mask, etc.
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    matrix: Optional[List[List[float]]] = None
+    inv_matrix: Optional[List[List[float]]] = None
+    input_shape: Optional[List[int]] = None
+    output_shape: Optional[List[int]] = None
+
+class Stage5VariantQuality(BaseModel):
+    visibility: float = 0.0
+    sharpness: float = 0.0
+    contrast: float = 0.0
+    text_readability: float = 0.0
+    geometry_quality: float = 0.0
+    ocr_support: float = 0.0
+
+class Stage5VariantInfo(BaseModel):
+    variant_id: str
+    type: str  # ORIGINAL, PERSPECTIVE_CORRECTED, CURVATURE_CORRECTED, CYLINDRICAL_UNWRAPPED, GLARE_REDUCED, SHADOW_CORRECTED, ROTATED, CONTRAST_ENHANCED, CLAHE, SHARPENED, DENOISED, ADAPTIVE_THRESHOLD, UPSCALED, CHANNEL_OPTIMIZED
+    source_variant: str = "original"
+    quality_scores: Stage5VariantQuality = Field(default_factory=Stage5VariantQuality)
+    transformation_chain: List[str] = Field(default_factory=list)
+    coordinate_mapping_available: bool = True
+    preview_base64: Optional[str] = None
+
+class Stage5DifficultRegion(BaseModel):
+    region_id: str
+    bbox: List[float] = Field(default_factory=list)  # [x, y, w, h] in variant space
+    original_bbox: List[float] = Field(default_factory=list)  # [x, y, w, h] in original image space
+    polygon: Optional[List[List[float]]] = None  # Detailed polygon coordinates
+    original_polygon: Optional[List[List[float]]] = None
+    distortion_type: str = "UNKNOWN"
+    recovery_technique_applied: Optional[str] = None
+    status: str = "RECOVERED"  # RECOVERED, PARTIALLY_OCCLUDED, TEXT_OCCLUDED_BY_GLARE, OCR_UNCERTAIN
+    confidence: float = 0.90
+
+class Stage5OcrConsensusItem(BaseModel):
+    consensus_id: str
+    raw_text: str
+    normalized_text: str
+    consensus_confidence: float = 0.95
+    agreement_count: int = 1
+    total_variants_evaluated: int = 1
+    competing_candidates: List[str] = Field(default_factory=list)
+    processed_bbox: List[float] = Field(default_factory=list)
+    original_bbox: List[float] = Field(default_factory=list)
+    original_polygon: Optional[List[List[float]]] = None
+    source_variants: List[str] = Field(default_factory=list)
+    transformation_chain: List[str] = Field(default_factory=list)
+    status: str = "CONFIRMED"  # CONFIRMED, OCR_UNCERTAIN, TEXT_OCCLUDED_BY_GLARE, PARTIALLY_OCCLUDED
+
+class Stage5Response(BaseModel):
+    scan_id: str
+    recovery_status: str = "COMPLETED"  # COMPLETED, MINIMAL_PROCESSING, DEGRADED_FALLBACK
+    distortions_detected: List[str] = Field(default_factory=list)
+    variants: List[Stage5VariantInfo] = Field(default_factory=list)
+    difficult_regions: List[Stage5DifficultRegion] = Field(default_factory=list)
+    ocr_consensus: List[Stage5OcrConsensusItem] = Field(default_factory=list)
+    uncertain_regions: List[Stage5OcrConsensusItem] = Field(default_factory=list)
+    fallback_used: bool = False
+    message: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+# ----------------------------------------------------
+# STAGE 6: UNIVERSAL PRODUCT-SPECIFIC ADAPTIVE SCHEMA MODELS
+# ----------------------------------------------------
+
+class Stage6CategoryCandidate(BaseModel):
+    category: str
+    subcategory: Optional[str] = None
+    confidence: float = 0.50
+    evidence: List[str] = Field(default_factory=list)
+
+class Stage6ProductProfile(BaseModel):
+    category: str = "UNKNOWN"
+    subcategory: Optional[str] = None
+    category_confidence: float = 0.0
+    category_status: str = "NEEDS_REVIEW"  # CONFIRMED, NEEDS_REVIEW, UNCERTAIN
+    category_evidence: List[str] = Field(default_factory=list)
+    category_candidates: List[Stage6CategoryCandidate] = Field(default_factory=list)
+
+class Stage6AdaptiveField(BaseModel):
+    field_name: str
+    value: Optional[str] = None
+    status: str = "NOT_VISIBLE"  # PRESENT, NOT_VISIBLE, NOT_APPLICABLE, UNKNOWN, NEEDS_REVIEW
+    relevance: float = 0.0
+    confidence: float = 0.0
+    source_region_ids: List[str] = Field(default_factory=list)
+    panel: Optional[str] = None
+    evidence: Optional[str] = None
+    unit: Optional[str] = None
+
+class Stage6AdaptiveSchema(BaseModel):
+    fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+    universal_core_fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+    category_specific_fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+
+class Stage6SingleProductProfile(BaseModel):
+    product_id: str
+    product_profile: Stage6ProductProfile
+    adaptive_schema: Stage6AdaptiveSchema
+    uncertain_fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+    not_visible_fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+    not_applicable_fields: List[Stage6AdaptiveField] = Field(default_factory=list)
+
+class Stage6Response(BaseModel):
+    scan_id: str
+    status: str = "COMPLETED"  # COMPLETED, NEEDS_REVIEW, DEGRADED_FALLBACK
+    products: List[Stage6SingleProductProfile] = Field(default_factory=list)
+    imported_product_detected: bool = False
+    message: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+# ==============================================================================
+# STAGE 7: CROSS-PANEL INFORMATION MERGING & MULTI-IMAGE CONSOLIDATION MODELS
+# ==============================================================================
+
+class Stage7SourceImage(BaseModel):
+    image_id: str
+    panel: str = "UNKNOWN"  # FRONT, BACK, LEFT, RIGHT, TOP, BOTTOM, SIDE, PARTIAL, UNKNOWN
+    scan_id: Optional[str] = None
+    bbox: List[float] = Field(default_factory=list)
+
+class Stage7FieldSource(BaseModel):
+    image_id: str
+    panel: str = "UNKNOWN"
+    region_id: Optional[str] = None
+    bbox: List[float] = Field(default_factory=list)
+    confidence: float = 0.90
+    raw_text: Optional[str] = None
+
+class Stage7ConflictCandidate(BaseModel):
+    value: str
+    image_id: str
+    panel: str = "UNKNOWN"
+    confidence: float = 0.90
+    raw_text: Optional[str] = None
+
+class Stage7FieldConflict(BaseModel):
+    field_name: str
+    status: str = "CONFLICT"
+    candidates: List[Stage7ConflictCandidate] = Field(default_factory=list)
+
+class Stage7UnifiedField(BaseModel):
+    field_name: str
+    value: Optional[str] = None
+    status: str = "CONFIRMED"  # CONFIRMED, CONFLICT, NEEDS_REVIEW, NOT_VISIBLE, NOT_APPLICABLE
+    confidence: float = 0.0
+    sources: List[Stage7FieldSource] = Field(default_factory=list)
+    unit: Optional[str] = None
+    evidence: Optional[str] = None
+    candidates: List[Stage7ConflictCandidate] = Field(default_factory=list)
+
+class Stage7CrossPanelLink(BaseModel):
+    link_id: str
+    entity_type: str  # MANUFACTURER_ADDRESS, PACKER_ADDRESS, IMPORTER_ADDRESS, BRAND_PRODUCT, etc.
+    source_image_id: str
+    target_image_id: str
+    source_panel: str = "UNKNOWN"
+    target_panel: str = "UNKNOWN"
+    confidence: float = 0.90
+    linked_value: str
+
+class Stage7ProductMatchEvidence(BaseModel):
+    image_a: str
+    image_b: str
+    same_product_confidence: float = 0.0
+    status: str = "MATCHED"  # MATCHED, POSSIBLE_MATCH, NOT_MATCHED, NEEDS_REVIEW
+    evidence: List[str] = Field(default_factory=list)
+
+class Stage7PanelCompleteness(BaseModel):
+    available_panels: List[str] = Field(default_factory=list)
+    missing_panels: List[str] = Field(default_factory=list)
+
+class Stage7EvidenceGraphNode(BaseModel):
+    node_id: str
+    node_type: str  # PRODUCT, PANEL, FIELD, ENTITY, REGION
+    label: str
+    image_id: Optional[str] = None
+    panel: Optional[str] = None
+
+class Stage7EvidenceGraphEdge(BaseModel):
+    source_node_id: str
+    target_node_id: str
+    relation: str  # HAS_PANEL, HAS_FIELD, LINKED_TO, OWNS
+
+class Stage7CrossPanelEvidenceGraph(BaseModel):
+    nodes: List[Stage7EvidenceGraphNode] = Field(default_factory=list)
+    edges: List[Stage7EvidenceGraphEdge] = Field(default_factory=list)
+
+class Stage7UnifiedProduct(BaseModel):
+    product_id: str = "product_001"
+    source_images: List[Stage7SourceImage] = Field(default_factory=list)
+    identity: Stage4ProductIdentity = Field(default_factory=Stage4ProductIdentity)
+    category_profile: Stage6ProductProfile = Field(default_factory=Stage6ProductProfile)
+    fields: List[Stage7UnifiedField] = Field(default_factory=list)
+    conflicts: List[Stage7FieldConflict] = Field(default_factory=list)
+    cross_panel_links: List[Stage7CrossPanelLink] = Field(default_factory=list)
+    evidence_graph: Stage7CrossPanelEvidenceGraph = Field(default_factory=Stage7CrossPanelEvidenceGraph)
+    panel_completeness: Stage7PanelCompleteness = Field(default_factory=Stage7PanelCompleteness)
+    merge_confidence: float = 0.90
+    status: str = "MERGED"  # MERGED, PARTIAL, NEEDS_REVIEW, UNMATCHED
+
+class Stage7Session(BaseModel):
+    session_id: str = "session_001"
+    image_ids: List[str] = Field(default_factory=list)
+    panel_ids: List[str] = Field(default_factory=list)
+    product_ids: List[str] = Field(default_factory=list)
+    product_matches: List[Stage7ProductMatchEvidence] = Field(default_factory=list)
+    products: List[Stage7UnifiedProduct] = Field(default_factory=list)
+
+class Stage7Response(BaseModel):
+    session_id: str
+    status: str = "COMPLETED"  # COMPLETED, NEEDS_REVIEW, PARTIAL
+    products: List[Stage7UnifiedProduct] = Field(default_factory=list)
+    session: Optional[Stage7Session] = None
+    message: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+# ==============================================================================
+# STAGE 8: VERIFIED LEGAL METROLOGY RULE ENGINE MODELS
+# ==============================================================================
+
+class Stage8RuleDefinition(BaseModel):
+    rule_id: str
+    act_name: str = "The Legal Metrology Act, 2009"
+    rules_name: str = "Legal Metrology (Packaged Commodities) Rules, 2011"
+    rule_number: str
+    sub_rule: Optional[str] = None
+    clause: Optional[str] = None
+    title: str
+    requirement_text: str
+    requirement_type: str = "DECLARATION"  # DECLARATION, PACK_SIZE, UNIT_SALE_PRICE, FSSAI, IMPORTER, CONSUMER_CARE
+    applicable_product_categories: List[str] = Field(default_factory=lambda: ["ALL"])
+    applicable_packaging_types: List[str] = Field(default_factory=lambda: ["ALL"])
+    applicable_market_context: str = "RETAIL"  # RETAIL, WHOLESALE, INSTITUTIONAL, ECOMMERCE, ALL
+    applicability_conditions: List[str] = Field(default_factory=list)
+    exceptions: List[str] = Field(default_factory=list)
+    exemptions: List[str] = Field(default_factory=list)
+    required_fields: List[str] = Field(default_factory=list)
+    validation_conditions: List[str] = Field(default_factory=list)
+    effective_from: Optional[str] = "2011-03-07"
+    effective_until: Optional[str] = None
+    jurisdiction: str = "INDIA"
+    source_name: str = "Gazette of India"
+    source_url: Optional[str] = None
+    source_document: Optional[str] = None
+    source_version: str = "2024.1"
+    verification_status: str = "VERIFIED"  # VERIFIED, UNVERIFIED, SUPERSEDED, NEEDS_REVIEW
+    notes: Optional[str] = None
+
+class Stage8ApplicabilityResult(BaseModel):
+    rule_id: str
+    applicability_status: str = "APPLICABLE"  # APPLICABLE, NOT_APPLICABLE, UNKNOWN, NEEDS_REVIEW
+    reason: str = "Applicable to product category"
+    conditions_evaluated: List[str] = Field(default_factory=list)
+
+class Stage8EvidenceItem(BaseModel):
+    image_id: Optional[str] = None
+    panel: Optional[str] = None
+    region_id: Optional[str] = None
+    bbox: List[float] = Field(default_factory=list)
+    observed_text: Optional[str] = None
+    normalized_value: Optional[str] = None
+    semantic_field: Optional[str] = None
+    confidence: float = 0.90
+
+class Stage8RuleTrace(BaseModel):
+    rule_id: str
+    applicable: bool = True
+    observed_field: Optional[str] = None
+    observed_value: Optional[str] = None
+    evidence: Optional[Stage8EvidenceItem] = None
+    evaluation: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NOT_APPLICABLE, NOT_VISIBLE, UNKNOWN, NEEDS_REVIEW, CONFLICT
+    confidence: float = 0.90
+    rule_source: Optional[str] = None
+    rule_version: Optional[str] = None
+    trace_steps: List[str] = Field(default_factory=list)
+
+class Stage8RuleEvaluation(BaseModel):
+    rule_id: str
+    rule_number: str
+    requirement_title: str
+    applicability_status: str = "APPLICABLE"  # APPLICABLE, NOT_APPLICABLE, UNKNOWN, NEEDS_REVIEW
+    evaluation_status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NOT_APPLICABLE, NOT_VISIBLE, UNKNOWN, NEEDS_REVIEW, CONFLICT
+    confidence: float = 0.90
+    evidence: List[Stage8EvidenceItem] = Field(default_factory=list)
+    rule_source: Optional[str] = None
+    rule_version: Optional[str] = None
+    trace: Optional[Stage8RuleTrace] = None
+
+class Stage8ProductEvaluation(BaseModel):
+    product_id: str = "product_001"
+    overall_status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW, PARTIAL
+    evaluations: List[Stage8RuleEvaluation] = Field(default_factory=list)
+    needs_review_items: List[Stage8RuleEvaluation] = Field(default_factory=list)
+    conflicts: List[Stage7FieldConflict] = Field(default_factory=list)
+    rule_traces: List[Stage8RuleTrace] = Field(default_factory=list)
+
+class Stage8Request(BaseModel):
+    session_id: str = "session_001"
+    product_id: Optional[str] = None
+    unified_product: Optional[Stage7UnifiedProduct] = None
+    rule_context: Dict[str, Any] = Field(default_factory=dict)
+
+class Stage8Response(BaseModel):
+    session_id: str
+    rule_engine_version: str = "2024.1"
+    status: str = "COMPLETED"  # COMPLETED, NEEDS_REVIEW, PARTIAL
+    product_evaluations: List[Stage8ProductEvaluation] = Field(default_factory=list)
+    overall_status: str = "COMPLIANT"
+    needs_review_items: List[Stage8RuleEvaluation] = Field(default_factory=list)
+    conflicts: List[Stage7FieldConflict] = Field(default_factory=list)
+    message: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+# =======================================================
+# STAGE 9 DATA MODELS: VIOLATION & EVIDENCE ENGINE
+# =======================================================
+
+class Stage9EvidenceItem(BaseModel):
+    image_id: Optional[str] = None
+    product_id: Optional[str] = None
+    panel: Optional[str] = None
+    region_id: Optional[str] = None
+    original_bbox: List[float] = Field(default_factory=list)
+    observed_text: Optional[str] = None
+    normalized_value: Optional[str] = None
+    semantic_field: Optional[str] = None
+    ocr_confidence: float = 0.90
+    semantic_confidence: float = 0.90
+    rule_evaluation_id: Optional[str] = None
+    evidence_confidence: float = 0.90
+
+class Stage9Violation(BaseModel):
+    violation_id: str
+    product_id: str
+    scan_id: Optional[str] = None
+    rule_id: str
+    rule_number: str
+    clause: Optional[str] = None
+    requirement: str
+    violation_type: str  # MISSING_REQUIRED_DECLARATION, INCORRECT_DECLARATION, INCONSISTENT_DECLARATION, INVALID_VALUE, FORMAT_NON_COMPLIANCE, QUANTITY_NON_COMPLIANCE, PRICE_DECLARATION_ISSUE, DATE_DECLARATION_ISSUE, ENTITY_INFORMATION_ISSUE, CONSUMER_INFORMATION_ISSUE, OTHER_VERIFIED_NON_COMPLIANCE
+    violation_status: str = "CONFIRMED"  # CONFIRMED, NEEDS_REVIEW, RESOLVED, DISMISSED
+    severity: str = "UNCLASSIFIED"  # LOW, MEDIUM, HIGH, CRITICAL, UNCLASSIFIED
+    description: str
+    observed_value: Optional[str] = None
+    expected_condition: str
+    evidence: List[Stage9EvidenceItem] = Field(default_factory=list)
+    confidence: float = 0.90
+    rule_source: Optional[str] = None
+    rule_version: Optional[str] = None
+    fingerprint: str
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    review_status: str = "NOT_REQUIRED"  # NOT_REQUIRED, PENDING_REVIEW, REVIEWED
+
+class Stage9ReviewItem(BaseModel):
+    review_id: str
+    product_id: str
+    reason: str  # INSUFFICIENT_EVIDENCE, CONFLICTING_DECLARATIONS, NOT_VISIBLE, UNKNOWN_STATUS, UNVERIFIED_RULE, AMBIGUOUS_SEMANTICS
+    related_rule_id: Optional[str] = None
+    related_rule_number: Optional[str] = None
+    description: str
+    evidence: List[Stage9EvidenceItem] = Field(default_factory=list)
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class Stage9ViolationSummary(BaseModel):
+    total_evaluations: int = 0
+    confirmed_violations: int = 0
+    needs_review_items: int = 0
+    compliant_rules: int = 0
+    not_applicable_rules: int = 0
+
+class Stage9ProductViolationResult(BaseModel):
+    product_id: str
+    overall_status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW
+    violations: List[Stage9Violation] = Field(default_factory=list)
+    review_items: List[Stage9ReviewItem] = Field(default_factory=list)
+    summary: Stage9ViolationSummary = Field(default_factory=Stage9ViolationSummary)
+
+class Stage9Request(BaseModel):
+    session_id: str = "session_001"
+    stage8_response: Optional[Stage8Response] = None
+    product_evaluations: Optional[List[Stage8ProductEvaluation]] = None
+
+class Stage9Response(BaseModel):
+    session_id: str
+    violation_engine_version: str = "2024.1"
+    status: str = "COMPLETED"  # COMPLETED, NEEDS_REVIEW
+    product_results: List[Stage9ProductViolationResult] = Field(default_factory=list)
+    overall_status: str = "COMPLIANT"
+    summary: Stage9ViolationSummary = Field(default_factory=Stage9ViolationSummary)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+# =======================================================
+# STAGE 10 DATA MODELS: FINAL INTEGRATION & PIPELINE
+# =======================================================
+
+class Stage10StageProgress(BaseModel):
+    stage_name: str
+    status: str = "PENDING"  # PENDING, RUNNING, COMPLETED, FAILED, NEEDS_REVIEW, SKIPPED
+    processing_time_ms: float = 0.0
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class Stage10ProcessingMetadata(BaseModel):
+    pipeline_version: str = "2024.1"
+    started_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    completed_at: Optional[str] = None
+    processing_time_ms: float = 0.0
+    stages_executed: List[Stage10StageProgress] = Field(default_factory=list)
+
+class Stage10AuditEvent(BaseModel):
+    event_id: str
+    scan_id: str
+    product_id: Optional[str] = None
+    stage: str
+    event_type: str
+    status: str
+    relevant_id: Optional[str] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class Stage10FinalResult(BaseModel):
+    scan_id: str
+    session_id: str
+    product_id: str
+    product_identity: Optional[Stage4ProductIdentity] = None
+    images: List[Dict[str, Any]] = Field(default_factory=list)
+    panels: List[Dict[str, Any]] = Field(default_factory=list)
+    extracted_information: List[Stage7UnifiedField] = Field(default_factory=list)
+    rule_evaluations: List[Stage8RuleEvaluation] = Field(default_factory=list)
+    violations: List[Stage9Violation] = Field(default_factory=list)
+    review_items: List[Stage9ReviewItem] = Field(default_factory=list)
+    conflicts: List[Stage7FieldConflict] = Field(default_factory=list)
+    evidence: List[Stage9EvidenceItem] = Field(default_factory=list)
+    overall_status: str = "COMPLIANT"  # COMPLIANT, NON_COMPLIANT, NEEDS_REVIEW, PARTIAL, FAILED
+    summary: Dict[str, int] = Field(default_factory=dict)
+    processing: Stage10ProcessingMetadata
+
+class Stage10ScanStatusResponse(BaseModel):
+    scan_id: str
+    session_id: str
+    pipeline_state: str
+    overall_status: str
+    progress: List[Stage10StageProgress] = Field(default_factory=list)
+    audit_events: List[Stage10AuditEvent] = Field(default_factory=list)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class Stage10RunRequest(BaseModel):
+    session_id: Optional[str] = None
+    images: List[Dict[str, Any]] = Field(default_factory=list)
+    options: Dict[str, Any] = Field(default_factory=dict)
+
+class Stage10RunResponse(BaseModel):
+    scan_id: str
+    session_id: str
+    pipeline_state: str
+    overall_status: str
+    final_results: List[Stage10FinalResult] = Field(default_factory=list)
+    audit_trail: List[Stage10AuditEvent] = Field(default_factory=list)
+    processing: Stage10ProcessingMetadata
+
+
+
+
+
 
