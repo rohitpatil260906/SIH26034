@@ -364,70 +364,63 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Central Scanning Station Card (Replit Warm Cream Card) */}
-      <div className="bg-[#FFFCF8] border border-[#E5E2DD] rounded-xl p-6 md:p-8 shadow-2xs">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] text-xs font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-[#6D28D9]" />
-              <span>Instant Optical Inspection • Multi-Surface Acquisition</span>
-            </div>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-[#1F2328]">
-              Ready to Inspect a Packaged Commodity?
-            </h2>
-            <p className="text-xs md:text-sm text-[#5F6368] leading-relaxed">
-              Capture or upload packaging labels for automated optical character recognition, PDP area analysis, and deterministic rule validation under Legal Metrology (Packaged Commodities) Rules, 2011.
-            </p>
+      {/* Central Scanning Station Card (Package Inspection CTA) */}
+      <div className="clean-card overflow-hidden">
+        <div className="p-8 sm:p-10 lg:p-12 flex flex-col justify-center max-w-3xl">
+          {/* Badge matching the image's light purple theme */}
+          <div className="inline-flex items-center self-start gap-2 px-3 py-1.5 mb-6 rounded-full bg-[#f5f3ff] border border-[#ede9fe] text-[#7c3aed] text-xs font-semibold tracking-wide">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Instant Optical Inspection</span>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleStartScan}
-              className="flex items-center space-x-2"
-            >
-              <Camera className="w-4 h-4 text-white" />
-              <span>Open Camera Scan</span>
-            </Button>
+          {/* Punchy, Confident Title */}
+          <h2 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-gray-900 leading-[1.15] mb-5 tracking-tight font-poppins">
+            Verify Compliance <br />
+            <span className="text-[#7c3aed] relative inline-block mt-1">
+              Instantly.
+              {/* Decorative underline */}
+              <svg
+                className="absolute w-full h-3 -bottom-1 left-0 text-[#f5f3ff] -z-10"
+                viewBox="0 0 100 12"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M0,10 Q50,0 100,10"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  fill="none"
+                />
+              </svg>
+            </span>
+          </h2>
 
-            <Button
-              variant="secondary"
-              size="md"
+          {/* Simplified Subtitle */}
+          <p className="text-gray-500 text-base sm:text-lg leading-relaxed mb-8 max-w-2xl font-dmsans">
+            Capture or upload packaging labels. Our engine automates character recognition and validates against Legal Metrology Rules.
+          </p>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 w-full">
+            <button
+              type="button"
+              onClick={handleStartScan}
+              className="btn-cta-primary group flex items-center justify-center gap-2.5 px-7 py-3.5 font-semibold rounded-xl w-full sm:w-auto text-base cursor-pointer font-poppins"
+            >
+              <Camera className="w-5 h-5 text-white transition-transform group-hover:scale-110" />
+              <span>Open Camera Scan</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 startNewInspection();
                 navigate('/new-inspection?step=2');
               }}
-              className="flex items-center space-x-2"
+              className="btn-cta-secondary group flex items-center justify-center gap-2.5 px-7 py-3.5 font-semibold rounded-xl w-full sm:w-auto text-base cursor-pointer font-poppins"
             >
-              <Upload className="w-4 h-4 text-[#5F6368]" />
+              <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#7c3aed] transition-colors" />
               <span>Upload Label Image</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* 4-Stage Architecture Pipeline Status */}
-        <div className="mt-6 pt-5 border-t border-[#E5E2DD] grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-            <span className="text-[#5F6368]">1. Optical Acquisition:</span>
-            <span className="font-mono text-[#16A34A] font-semibold">Ready</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-            <span className="text-[#5F6368]">2. Tesseract OCR:</span>
-            <span className="font-mono text-[#16A34A] font-semibold">Active</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-            <span className="text-[#5F6368]">3. Rule 6/7/8 Engine:</span>
-            <span className="font-mono text-[#16A34A] font-semibold">LMPC 2011</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-            <span className="text-[#5F6368]">4. Section 36 Notice:</span>
-            <span className="font-mono text-[#16A34A] font-semibold">Enabled</span>
+            </button>
           </div>
         </div>
       </div>
@@ -530,18 +523,18 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* GSTIN / Manufacturer Quick Lookup Tool */}
-        <div className="lg:col-span-1">
-          <Card orientation="vertical" className="h-full">
+        <div className="lg:col-span-1 h-fit">
+          <Card orientation="vertical" className="h-fit">
             <CardHeader
               title="GSTIN Verification Tool"
               subtitle="Statutory manufacturer verification"
             />
-            <CardContent className="space-y-3">
+            <CardContent className="p-5 flex flex-col gap-4">
               <form onSubmit={handleVerifyGstin} className="space-y-2">
                 <label className="block text-xs font-semibold text-[#1F2328]">
                   Manufacturer GSTIN / UIN:
                 </label>
-                <div className="flex space-x-2">
+                <div className="flex flex-row items-center gap-3">
                   <input
                     type="text"
                     value={gstinInput}
@@ -585,21 +578,21 @@ export const DashboardPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="pt-3 border-t border-[#E5E2DD]">
+              <div className="pt-4 border-t border-[#E5E2DD]">
                 <span className="text-[11px] font-bold text-[#8A8F98] uppercase tracking-wider block mb-2">
                   Verification Rules Checked:
                 </span>
-                <ul className="text-xs text-[#5F6368] space-y-1.5">
+                <ul className="text-xs text-[#5F6368] space-y-2">
                   <li className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shrink-0"></span>
                     <span>Rule 6(1)(a) Registered manufacturer</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shrink-0"></span>
                     <span>Rule 27 E-Commerce marketplace seller</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shrink-0"></span>
                     <span>State / UT territorial jurisdiction alignment</span>
                   </li>
                 </ul>

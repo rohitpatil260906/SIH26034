@@ -580,12 +580,9 @@ class ScanProcessResponse(BaseModel):
     measurement_validation: Optional[MeasurementValidation] = None
     labelme_annotation: Optional[LabelMeAnnotation] = None
     external_verification: str = "External verification: Not available"
-<<<<<<< HEAD
     jurisdiction: Optional[JurisdictionInfo] = None
-=======
     lm_compass_result: Optional[LmCompassResult] = None
     universal_fields: List[UniversalFieldObject] = Field(default_factory=list)
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class BenchmarkEvaluationMetric(BaseModel):

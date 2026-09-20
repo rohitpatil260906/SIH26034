@@ -23,7 +23,7 @@ interface LabelGraphicProps {
 }
 
 export const LabelGraphic: React.FC<LabelGraphicProps> = ({
-  svgMockType = 'front-mustard',
+  svgMockType,
   customImageUrl,
   surface,
   boundingBoxes = [],
@@ -413,7 +413,7 @@ export const LabelGraphic: React.FC<LabelGraphicProps> = ({
           <span className="text-slate-500">|</span>
           <span className="text-emerald-400 font-medium text-[11px] flex items-center">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1"></span>
-            {customImageUrl ? 'Live Captured Photo' : 'Digital Label Asset'}
+            {customImageUrl ? 'Live Captured Photo' : svgMockType ? 'Digital Label Asset' : 'Awaiting Photo'}
           </span>
         </div>
         <div className="flex items-center space-x-1.5">
@@ -483,8 +483,18 @@ export const LabelGraphic: React.FC<LabelGraphicProps> = ({
                 Real Label Photo • 300 DPI Optical Ingest
               </div>
             </div>
-          ) : (
+          ) : svgMockType ? (
             renderSvgContent()
+          ) : (
+            <div className="relative w-full py-16 px-6 rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/60 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 mb-3">
+                <Crosshair className="w-6 h-6 text-emerald-400/80" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-200">Awaiting Packaging Photo</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
+                Click "Open Device Camera & Photograph" or upload a label photo to begin statutory compliance inspection.
+              </p>
+            </div>
           )}
 
           {/* Overlay Bounding Boxes */}

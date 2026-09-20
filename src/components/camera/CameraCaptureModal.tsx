@@ -8,11 +8,10 @@ import {
   RefreshCw,
   AlertCircle,
   Upload,
-  Sparkles,
   Timer,
-  Sliders,
   ScanLine,
-  Maximize2
+  Lock,
+  CameraOff
 } from 'lucide-react';
 import { SurfaceType } from '../../types';
 
@@ -33,8 +32,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user'); // Default to 'user' for laptop webcams compatibility
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user'); // Default to 'user' for laptop webcam compatibility
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isPermissionDenied, setIsPermissionDenied] = useState<boolean>(false);
   const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(false);
   const [selectedSurface, setSelectedSurface] = useState<SurfaceType>(surface || defaultSurface);
   const [isShutterActive, setIsShutterActive] = useState<boolean>(false);
@@ -47,16 +47,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const [useTimer, setUseTimer] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  // Live Optical Simulator (when no camera or permission denied)
-  const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(false);
-  const [simulatorSample, setSimulatorSample] = useState<'mustard' | 'facewash' | 'lakme'>('lakme');
-
+  // Persistent reference to stream for leak-free track cleanup across renders and closures
+  const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const simulatorCanvasRef = useRef<HTMLCanvasElement>(null);
   const countdownTimerRef = useRef<any>(null);
-  const animationFrameRef = useRef<number | null>(null);
 
   // Audio synthesizer for camera shutter click
   const playShutterSound = useCallback(() => {
@@ -114,7 +110,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
       setVideoDevices(videoInputs);
-      if (videoInputs.length > 0 && !selectedDeviceId) {
+      if (videoInputs.length > 0 && !selectedDeviceId && videoInputs[0].deviceId) {
         setSelectedDeviceId(videoInputs[0].deviceId);
       }
     } catch (e) {
@@ -122,118 +118,157 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   }, [selectedDeviceId]);
 
-  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
+  // Guaranteed clean camera shutdown
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('Error stopping track:', e);
+        }
+      });
+      streamRef.current = null;
+    }
+    setStream(null);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdown(null);
+  }, []);
 
-  // Progressive camera initialization with seamless optical fallback
+  // Start device camera via navigator.mediaDevices.getUserMedia
   const startCamera = useCallback(async (deviceId?: string, mode?: 'environment' | 'user') => {
     setIsLoadingCamera(true);
     setCameraError(null);
-    setCameraNotice(null);
+    setIsPermissionDenied(false);
 
-    // Stop current stream if running
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
+    // Stop any existing stream before opening a new one
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
       setStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      console.warn('Camera API not supported; falling back to optical simulator');
-      setCameraNotice('Webcam API is not supported in this environment. Switched to Live Optical Camera Feed — ready to shoot!');
-      setIsSimulatorActive(true);
       setIsLoadingCamera(false);
+      setCameraError('Camera API is not supported by your browser or in this context (requires HTTPS or localhost).');
       return;
     }
 
     const preferredMode = mode || facingMode;
     let acquiredStream: MediaStream | null = null;
+    let lastError: any = null;
 
-    // 1. If explicit device ID selected
-    if (deviceId) {
+    // 1. Try explicit device ID if selected
+    if (deviceId && deviceId.trim()) {
       try {
         acquiredStream = await navigator.mediaDevices.getUserMedia({
           video: {
             deviceId: { exact: deviceId },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
           },
           audio: false
         });
-      } catch {
+      } catch (err1) {
         try {
           acquiredStream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: deviceId } },
             audio: false
           });
-        } catch (e) {
-          console.warn('Selected camera device failed, falling back to default:', e);
+        } catch (err2: any) {
+          console.warn('Selected deviceId failed, falling back:', err2);
+          lastError = err2;
         }
       }
     }
 
-    // 2. Try standard 720p
+    // 2. Try with preferred facingMode (ideal 1080p/720p)
     if (!acquiredStream) {
       try {
         acquiredStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: preferredMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            facingMode: { ideal: preferredMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
           },
           audio: false
         });
-      } catch (err1) {
-        console.warn('Ideal facingMode + 720p failed, trying basic video...', err1);
+      } catch (err3) {
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: preferredMode
+            },
+            audio: false
+          });
+        } catch (err4: any) {
+          console.warn('FacingMode constraint failed, trying basic video:', err4);
+          lastError = err4;
+        }
       }
     }
 
-    // 3. Try any available video constraint (fallback for laptop webcams)
+    // 3. Fallback: universal basic video: true constraint
     if (!acquiredStream) {
       try {
         acquiredStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false
         });
-      } catch (err2: any) {
-        console.warn('Hardware camera acquisition failed, activating live optical simulator:', err2);
-        let notice = 'No physical webcam detected. Live Optical Camera Feed active with real statutory labels — ready to shoot!';
-        if (err2.name === 'NotAllowedError' || err2.name === 'PermissionDeniedError') {
-          notice = 'Webcam permission blocked by browser. Using Live Optical Camera Feed (click address bar lock icon to grant camera). Ready to shoot!';
-        }
-        setCameraNotice(notice);
-        setIsSimulatorActive(true);
-        setIsLoadingCamera(false);
-        return;
+      } catch (err5: any) {
+        console.warn('Basic video request failed:', err5);
+        lastError = err5;
       }
     }
 
     if (acquiredStream) {
+      streamRef.current = acquiredStream;
       setStream(acquiredStream);
-      setIsSimulatorActive(false);
       setIsLoadingCamera(false);
       setCameraError(null);
-      refreshDevices();
-    }
-  }, [facingMode, stream, refreshDevices]);
+      setIsPermissionDenied(false);
 
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+      if (videoRef.current) {
+        videoRef.current.srcObject = acquiredStream;
+        videoRef.current.play().catch(err => {
+          console.warn('Video autoplay aborted:', err);
+        });
+      }
+
+      refreshDevices();
+    } else if (lastError) {
+      setIsLoadingCamera(false);
+      const isDenied =
+        lastError.name === 'NotAllowedError' ||
+        lastError.name === 'PermissionDeniedError' ||
+        lastError.message?.toLowerCase().includes('permission') ||
+        lastError.message?.toLowerCase().includes('denied');
+
+      if (isDenied) {
+        setIsPermissionDenied(true);
+        setCameraError('Camera permission is required to scan a package. Please allow camera access in your browser and click "Retry Camera".');
+      } else if (lastError.name === 'NotFoundError' || lastError.name === 'DevicesNotFoundError') {
+        setCameraError('No camera device was detected on your system. Please connect a webcam and click "Retry Camera".');
+      } else if (lastError.name === 'NotReadableError' || lastError.name === 'TrackStartError') {
+        setCameraError('Camera is already in use by another application or tab. Please close other software using the camera and click "Retry Camera".');
+      } else {
+        setCameraError(lastError.message || 'Unable to access the device camera. Please check your webcam connection and browser settings.');
+      }
     }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    setCountdown(null);
-  }, [stream]);
+  }, [facingMode, refreshDevices]);
 
   // Synchronize stream with video element
   useEffect(() => {
-    if (videoRef.current && stream && !capturedImage && !isSimulatorActive) {
+    if (videoRef.current && stream && !capturedImage) {
       videoRef.current.srcObject = stream;
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
@@ -242,7 +277,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         });
       }
     }
-  }, [stream, capturedImage, isSimulatorActive]);
+  }, [stream, capturedImage]);
 
   // Handle open / close lifecycle
   useEffect(() => {
@@ -250,13 +285,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       stopCamera();
       setCapturedImage(null);
       setCameraError(null);
-      setIsSimulatorActive(false);
+      setIsPermissionDenied(false);
       return;
     }
 
-    // Reset surface default
-    setSelectedSurface(defaultSurface);
-    // Start camera stream immediately upon opening
+    setSelectedSurface(surface || defaultSurface);
     startCamera(selectedDeviceId || undefined, facingMode);
 
     return () => {
@@ -264,189 +297,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     };
   }, [isOpen]);
 
-  // Interactive Live Optical Simulator Canvas loop
-  useEffect(() => {
-    if (!isSimulatorActive || capturedImage || !isOpen) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      return;
-    }
-
-    const canvas = simulatorCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let scanLineY = 50;
-    let scanDirection = 2;
-
-    const renderSimulator = () => {
-      canvas.width = 800;
-      canvas.height = 600;
-
-      // Background backdrop
-      ctx.fillStyle = '#090d16';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Package Pouch Body
-      const pouchX = 220;
-      const pouchY = 60;
-      const pouchW = 360;
-      const pouchH = 480;
-
-      const grad = ctx.createLinearGradient(pouchX, pouchY, pouchX + pouchW, pouchY + pouchH);
-      if (simulatorSample === 'lakme') {
-        grad.addColorStop(0, '#fef3c7');
-        grad.addColorStop(0.3, '#fde68a');
-        grad.addColorStop(0.7, '#f59e0b');
-        grad.addColorStop(1, '#ea580c');
-      } else if (simulatorSample === 'mustard') {
-        grad.addColorStop(0, '#fef08a');
-        grad.addColorStop(0.5, '#fde047');
-        grad.addColorStop(1, '#eab308');
-      } else {
-        grad.addColorStop(0, '#dcfce7');
-        grad.addColorStop(0.5, '#86efac');
-        grad.addColorStop(1, '#22c55e');
-      }
-
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.roundRect(pouchX, pouchY, pouchW, pouchH, 16);
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = simulatorSample === 'lakme' ? '#b45309' : simulatorSample === 'mustard' ? '#ca8a04' : '#15803d';
-      ctx.stroke();
-
-      // Top statutory header
-      ctx.fillStyle = '#0f2942';
-      ctx.fillRect(pouchX + 20, pouchY + 20, pouchW - 40, 50);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'LAKMÉ 9 TO 5 SUN EXPERT'
-          : simulatorSample === 'mustard'
-          ? 'HERITAGE SHUDDH MUSTARD OIL'
-          : 'NOURISHCARE NEEM FACE WASH',
-        pouchX + pouchW / 2,
-        pouchY + 52
-      );
-
-      // Declarations
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 17px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'NET WT.: 56 g (5% NIA-C AQUA GEL)'
-          : simulatorSample === 'mustard'
-          ? 'NET QUANTITY: 1 LITRE'
-          : 'NET VOLUME: 150 ML',
-        pouchX + 30,
-        pouchY + 115
-      );
-
-      ctx.fillStyle = simulatorSample === 'lakme' ? '#0f172a' : '#b91c1c';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'MRP ₹ 499/- (INCL. OF ALL TAXES)'
-          : simulatorSample === 'mustard'
-          ? 'MRP ₹ 165.00'
-          : 'MRP ₹ 149.00 (incl. of all taxes)',
-        pouchX + 30,
-        pouchY + 150
-      );
-
-      if (simulatorSample === 'lakme') {
-        ctx.fillStyle = '#0369a1';
-        ctx.font = 'bold 15px monospace';
-        ctx.fillText('USP ₹ 8.91/g (STATUTORY RULE 6(2))', pouchX + 30, pouchY + 178);
-      }
-
-      ctx.fillStyle = '#334155';
-      ctx.font = '12px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'Mfg: (AY) Aero Care LLP, DNH 396 235 for HUL'
-          : simulatorSample === 'mustard'
-          ? 'Mfg: Heritage Agro Oil Mills, Alwar, RJ - 301030'
-          : 'Mfg: NourishCare Personal, Solan, HP - 173205',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 208 : 210)
-      );
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? '# MFD: 02/26 B005 | @ USE BEFORE: 01/28'
-          : 'Batch No: LM-2026/08-B | Date: 08/2026',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 232 : 235)
-      );
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'Levercare Toll-Free: 1800-10-22-221 | lever.care@unilever.com'
-          : 'Consumer Care: 1800-200-9844 | care@gov.in',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 256 : 260)
-      );
-
-      // Barcode simulation
-      ctx.fillStyle = '#000000';
-      for (let i = 0; i < 40; i++) {
-        const w = (i % 3 === 0) ? 4 : (i % 2 === 0) ? 2 : 1;
-        ctx.fillRect(pouchX + 30 + (i * 7), pouchY + 295, w, 60);
-      }
-      ctx.font = '12px monospace';
-      ctx.fillText(
-        simulatorSample === 'lakme' ? '8 909106 031241' : '8 901234 567890',
-        pouchX + 90,
-        pouchY + 375
-      );
-
-      // Moving laser scan line
-      scanLineY += scanDirection;
-      if (scanLineY > pouchY + pouchH - 20 || scanLineY < pouchY + 20) {
-        scanDirection = -scanDirection;
-      }
-
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = '#34d399';
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.moveTo(pouchX + 10, scanLineY);
-      ctx.lineTo(pouchX + pouchW - 10, scanLineY);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      animationFrameRef.current = requestAnimationFrame(renderSimulator);
-    };
-
-    renderSimulator();
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [isSimulatorActive, simulatorSample, capturedImage, isOpen]);
-
-  // Execute snapshot capture
+  // Execute snapshot capture directly from webcam stream
   const performActualCapture = () => {
     playShutterSound();
     setIsShutterActive(true);
     setTimeout(() => setIsShutterActive(false), 220);
-
-    if (isSimulatorActive && simulatorCanvasRef.current) {
-      const canvas = simulatorCanvasRef.current;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      setCapturedImage(dataUrl);
-      return;
-    }
 
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -491,9 +346,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   };
 
-  // Keyboard shortcut: Spacebar or Enter triggers photo shoot
+  // Keyboard shortcut: Spacebar triggers photo shoot
   useEffect(() => {
-    if (!isOpen || capturedImage) return;
+    if (!isOpen || capturedImage || cameraError || isLoadingCamera) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && e.target === document.body) {
@@ -504,15 +359,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, capturedImage, useTimer, isSimulatorActive]);
+  }, [isOpen, capturedImage, cameraError, isLoadingCamera, useTimer]);
 
   const handleRetake = () => {
     setCapturedImage(null);
-    if (isSimulatorActive) {
-      // Simulator continues
-    } else {
-      startCamera(selectedDeviceId || undefined, facingMode);
-    }
+    startCamera(selectedDeviceId || undefined, facingMode);
   };
 
   const handleConfirmPhoto = () => {
@@ -556,11 +407,14 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-bold text-white tracking-wide">
-                  Optical Product Scanner & Live Camera
+                  Live Device Camera & Packaging Scanner
                 </h3>
-                <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold">
-                  LIVE READY
-                </span>
+                {stream && !cameraError && (
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>LIVE WEBCAM</span>
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400">
                 Legal Metrology Packaging Inspection • High-Definition Optical Frame Capture
@@ -569,42 +423,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* Quick Camera Mode Switcher */}
-            <div className="hidden sm:flex items-center space-x-1 bg-slate-800 p-1 rounded-lg border border-slate-700 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimulatorActive(false);
-                  startCamera();
-                }}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                  !isSimulatorActive
-                    ? 'bg-[#0f2942] text-amber-300 font-bold border border-amber-400/40 shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Use physical webcam/camera connected to this machine"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>Webcam</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  stopCamera();
-                  setIsSimulatorActive(true);
-                }}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                  isSimulatorActive
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Use Live Optical Camera Feed with calibrated packaging"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Optical Feed</span>
-              </button>
-            </div>
-
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
@@ -631,10 +449,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           )}
 
-          {/* Hidden Canvas for standard video extraction */}
+          {/* Hidden Canvas for video frame extraction */}
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Case 1: Photo has been shot - Review & Confirm Screen */}
+          {/* Case 1: Photo has been captured - Review & Confirm Screen */}
           {capturedImage ? (
             <div className="relative w-full h-full flex flex-col items-center justify-center p-4 bg-slate-950">
               <img
@@ -644,47 +462,66 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               />
               <div className="absolute top-4 left-4 bg-emerald-900/90 border border-emerald-500 text-emerald-200 px-3 py-1 rounded-md text-xs font-semibold flex items-center space-x-2 shadow-lg">
                 <Check className="w-4 h-4 text-emerald-300" />
-                <span>Photo Captured Successfully • Ready for OCR & Rule Engine</span>
+                <span>Photo Captured From Webcam • Ready for OCR & Rule Engine</span>
               </div>
             </div>
-          ) : isSimulatorActive ? (
-            /* Case 2: Live Interactive Optical Simulator */
-            <div className="relative w-full h-full flex items-center justify-center">
-              <canvas
-                ref={simulatorCanvasRef}
-                className="w-full h-full object-contain max-h-[440px]"
-              />
-              <div className="absolute top-3 left-3 bg-amber-900/80 border border-amber-600 text-amber-200 px-2.5 py-0.5 rounded text-[11px] font-mono flex items-center space-x-1.5 shadow z-10">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Live Optical Packaging Feed</span>
+          ) : cameraError ? (
+            /* Case 2: Camera Permission / Device Error Screen */
+            <div className="p-8 text-center space-y-4 max-w-md">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
+                isPermissionDenied 
+                  ? 'bg-red-500/20 border border-red-500/40 text-red-400' 
+                  : 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
+              }`}>
+                {isPermissionDenied ? (
+                  <Lock className="w-7 h-7" />
+                ) : (
+                  <CameraOff className="w-7 h-7" />
+                )}
               </div>
-              {cameraNotice && (
-                <div className="absolute top-10 left-3 right-3 z-10 bg-slate-900/90 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded text-xs font-sans shadow-lg flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="text-[11px]">{cameraNotice}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSimulatorActive(false);
-                      startCamera();
-                    }}
-                    className="ml-2 px-2 py-0.5 bg-amber-500 text-slate-950 font-bold rounded text-[10px] hover:bg-amber-400 shrink-0 cursor-pointer"
-                  >
-                    Try Webcam
-                  </button>
-                </div>
-              )}
+              <div>
+                <h4 className="text-base font-bold text-white">
+                  {isPermissionDenied ? 'Camera Permission Required' : 'Camera Unavailable'}
+                </h4>
+                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                  {cameraError}
+                </p>
+                {isPermissionDenied && (
+                  <p className="text-[11px] text-slate-400 mt-2">
+                    To allow access, look for the camera/lock icon in your browser address bar and switch Camera permissions to "Allow".
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                  onClick={() => startCamera(selectedDeviceId || undefined, facingMode)}
+                >
+                  Retry Camera
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-200 border-slate-700 hover:bg-slate-800"
+                  leftIcon={<Upload className="w-3.5 h-3.5" />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Upload Photo Instead
+                </Button>
+              </div>
             </div>
-          ) : !cameraError ? (
-            /* Case 3: Real Hardware Camera Feed */
+          ) : (
+            /* Case 3: Real Hardware Camera Live Feed */
             <div className="relative w-full h-full flex items-center justify-center">
               {isLoadingCamera && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 space-y-3">
                   <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
                   <p className="text-xs text-slate-300 font-medium">
-                    Initializing Optical Sensor & Camera Stream...
+                    Connecting to Webcam & Opening Live Stream...
                   </p>
                 </div>
               )}
@@ -719,78 +556,37 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 </div>
 
                 <div className="flex justify-between items-end text-[10px] font-mono text-emerald-400/90">
-                  <span>[ OPTICAL 300 DPI ]</span>
+                  <span>[ LIVE OPTICAL FEED ]</span>
                   <span>[ PRESS SPACEBAR OR CLICK SHOOT ]</span>
                 </div>
-              </div>
-            </div>
-          ) : (
-            /* Case 4: Camera Notice / Permission / Device Error Screen */
-            <div className="p-6 text-center space-y-4 max-w-md">
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">Live Camera Notice</h4>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  {cameraError}
-                </p>
-              </div>
-
-              <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-                  onClick={() => startCamera()}
-                >
-                  Retry Camera
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-                  onClick={() => setIsSimulatorActive(true)}
-                >
-                  Use Optical Simulator
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-slate-200 border-slate-700"
-                  leftIcon={<Upload className="w-3.5 h-3.5" />}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Upload File
-                </Button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Surface Selection & Quick Bar */}
+        {/* Surface Selection & Hardware Bar */}
         <div className="px-4 py-2.5 bg-slate-850 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
           <div className="flex items-center space-x-2 text-slate-300">
             <span className="font-semibold text-slate-200">Packaging Surface:</span>
             <div className="flex items-center space-x-1.5 overflow-x-auto">
-              {(['Front (PDP)', 'Back Panel', 'Side Panel', 'Top/Bottom'] as SurfaceType[]).map((surface) => (
+              {(['Front (PDP)', 'Back Panel', 'Side Panel', 'Top/Bottom'] as SurfaceType[]).map((surf) => (
                 <button
-                  key={surface}
+                  key={surf}
                   type="button"
-                  onClick={() => setSelectedSurface(surface)}
+                  onClick={() => setSelectedSurface(surf)}
                   className={`px-2.5 py-1 rounded text-xs transition cursor-pointer ${
-                    selectedSurface === surface
+                    selectedSurface === surf
                       ? 'bg-emerald-600 text-white font-bold shadow-xs'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  {surface}
+                  {surf}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Quick Hardware Controls */}
+          {/* Hardware Controls */}
           {!capturedImage && !cameraError && (
             <div className="flex items-center space-x-2">
               {/* Device Selector (if multiple webcams available) */}
@@ -837,40 +633,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               </button>
             </div>
           )}
-
-          {/* Simulator sample switcher */}
-          {isSimulatorActive && !capturedImage && (
-            <div className="flex items-center space-x-2">
-              <span className="text-slate-400">Sample:</span>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('lakme')}
-                className={`px-2.5 py-1 rounded text-xs transition font-semibold cursor-pointer ${
-                  simulatorSample === 'lakme' ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                ✨ Lakmé Sunscreen (56g)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('mustard')}
-                className={`px-2 py-0.5 rounded text-xs ${
-                  simulatorSample === 'mustard' ? 'bg-amber-600 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Mustard Oil
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('facewash')}
-                className={`px-2 py-0.5 rounded text-xs ${
-                  simulatorSample === 'facewash' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Neem Face Wash
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Action Controls Footer */}
@@ -893,29 +655,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             >
               Upload Photo Instead
             </Button>
-
-            {!isSimulatorActive && !capturedImage && (
-              <button
-                type="button"
-                onClick={() => setIsSimulatorActive(true)}
-                className="text-xs text-slate-400 hover:text-slate-200 underline hidden sm:inline"
-              >
-                Test with Optical Simulator
-              </button>
-            )}
-
-            {isSimulatorActive && !capturedImage && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimulatorActive(false);
-                  startCamera();
-                }}
-                className="text-xs text-emerald-400 hover:text-emerald-300 underline"
-              >
-                Back to Real Webcam
-              </button>
-            )}
           </div>
 
           {/* Right Action: Shoot Photo or Review Confirm */}
@@ -941,7 +680,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   Use This Photo for Inspection
                 </Button>
               </>
-            ) : (
+            ) : !cameraError ? (
               <button
                 type="button"
                 onClick={handleShootPhoto}
@@ -957,7 +696,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   {countdown !== null ? `Shooting in ${countdown}s...` : 'Shoot Photo Now'}
                 </span>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

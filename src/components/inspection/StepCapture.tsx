@@ -43,6 +43,7 @@ import { getGeminiApiKey, setGeminiApiKey, removeGeminiApiKey } from '../../serv
 export const StepCapture: React.FC = () => {
   const {
     currentInspection,
+    selectedSamplePackage,
     addImageToInspection,
     removeImageFromInspection,
     updateInspectionDetails,
@@ -117,7 +118,7 @@ export const StepCapture: React.FC = () => {
   };
 
   const currentImage = currentInspection?.images[activeSurfaceIndex] || currentInspection?.images[0];
-  const svgMockType = 'front-mustard';
+  const svgMockType = selectedSamplePackage?.images?.[activeSurfaceIndex]?.svgMock || selectedSamplePackage?.images?.[0]?.svgMock;
 
   // Analyze image quality whenever the active photo changes (12 automated checks)
   useEffect(() => {
