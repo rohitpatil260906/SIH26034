@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+@theme {
+  --font-poppins: 'Poppins', sans-serif;
+  --font-dmsans: 'DM Sans', sans-serif;
+}
+
+.font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
+
+.font-dmsans {
+  font-family: 'DM Sans', sans-serif;
+}
+
 @layer base {
   :root {
     /* Replit-inspired Light Minimalist Palette */

@@ -202,11 +202,11 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F7F4] flex flex-col justify-between text-[#1F2328] font-sans antialiased">
+    <div className="min-h-screen bg-[#F8F7F4] flex flex-col justify-between text-[#1F2328] font-dmsans antialiased">
       {/* Top Government Official Strip */}
-      <header className="bg-[#FFFCF8] border-b border-[#E5E2DD] px-4 sm:px-8 py-2.5 text-xs flex items-center justify-between">
+      <header className="bg-[#FFFCF8] border-b border-[#E5E2DD] px-4 sm:px-8 py-2.5 text-xs flex items-center justify-between font-dmsans">
         <div className="flex items-center space-x-2.5">
-          <span className="font-bold text-[#1F2328] tracking-wider text-[11px] sm:text-xs">
+          <span className="font-bold text-[#1F2328] tracking-wider text-[11px] sm:text-xs font-poppins">
             GOVERNMENT OF INDIA
           </span>
           <span className="text-[#8A8F98]">|</span>
@@ -236,10 +236,10 @@ export const LoginPage: React.FC = () => {
                 className="h-16 w-auto object-contain drop-shadow-xs"
               />
               <div className="space-y-0.5">
-                <p className="text-[11px] font-bold tracking-widest text-[#1F2328] uppercase font-sans">
+                <p className="text-[11px] font-bold tracking-widest text-[#1F2328] uppercase font-poppins">
                   GOVERNMENT OF INDIA
                 </p>
-                <p className="text-xs font-semibold text-[#5F6368]">
+                <p className="text-xs font-semibold text-[#5F6368] font-dmsans">
                   Legal Metrology Department
                 </p>
               </div>
@@ -248,14 +248,14 @@ export const LoginPage: React.FC = () => {
             {/* VidhiCheck Brand Presentation */}
             <div className="pt-2 border-t border-[#E5E2DD]/60 flex flex-col items-center">
               <div className="flex items-center justify-center gap-2">
-                <div className="w-7 h-7 rounded-md bg-[#FFF1EA] border border-[#FF5A1F]/30 flex items-center justify-center text-[#FF5A1F]">
-                  <Building2 className="w-4 h-4 text-[#FF5A1F]" />
+                <div className="w-7 h-7 rounded-md bg-[#F5F3FF] border border-[#7C3AED]/30 flex items-center justify-center text-[#7C3AED]">
+                  <Building2 className="w-4 h-4 text-[#7C3AED]" />
                 </div>
-                <h1 className="text-2xl font-extrabold text-[#1F2328] tracking-tight">
+                <h1 className="text-2xl font-extrabold text-[#1F2328] tracking-tight font-poppins">
                   VidhiCheck
                 </h1>
               </div>
-              <p className="text-xs text-[#5F6368] mt-1 font-medium">
+              <p className="text-xs text-[#5F6368] mt-1 font-medium font-dmsans">
                 AI-Powered Packaged Commodity Compliance Checker
               </p>
             </div>
@@ -277,9 +277,9 @@ export const LoginPage: React.FC = () => {
                     setAuthMode('login');
                     setErrors({});
                   }}
-                  className={`py-2 px-3 rounded-lg transition-all duration-150 cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg transition-all duration-150 cursor-pointer font-poppins ${
                     authMode === 'login'
-                      ? 'bg-[#FF5A1F] text-white shadow-xs font-bold'
+                      ? 'bg-[#7C3AED] text-white shadow-xs font-bold'
                       : 'text-[#5F6368] hover:text-[#1F2328]'
                   }`}
                 >
@@ -295,9 +295,9 @@ export const LoginPage: React.FC = () => {
                     setAuthMode('signup');
                     setErrors({});
                   }}
-                  className={`py-2 px-3 rounded-lg transition-all duration-150 cursor-pointer ${
+                  className={`py-2 px-3 rounded-lg transition-all duration-150 cursor-pointer font-poppins ${
                     authMode === 'signup'
-                      ? 'bg-[#FF5A1F] text-white shadow-xs font-bold'
+                      ? 'bg-[#7C3AED] text-white shadow-xs font-bold'
                       : 'text-[#5F6368] hover:text-[#1F2328]'
                   }`}
                 >
@@ -321,7 +321,7 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="officerName"
-                  className="block text-xs font-semibold text-[#1F2328] mb-1.5"
+                  className="block text-xs font-semibold text-[#1F2328] mb-1.5 font-dmsans"
                 >
                   Officer Name <span className="text-[#DC2626]">*</span>
                 </label>
@@ -345,16 +345,16 @@ export const LoginPage: React.FC = () => {
                     placeholder="Enter officer name"
                     aria-invalid={!!errors.officerName}
                     aria-describedby={errors.officerName ? 'officerName-error' : undefined}
-                    className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] transition-colors focus:bg-white focus:outline-none ${
+                    className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] font-dmsans transition-colors focus:bg-white focus:outline-none ${
                       errors.officerName
                         ? 'border-[#DC2626] focus:border-[#DC2626]'
-                        : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                        : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                     }`}
                     required
                   />
                 </div>
                 {errors.officerName && (
-                  <p id="officerName-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                  <p id="officerName-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                     <AlertCircle className="w-3 h-3 shrink-0" />
                     <span>{errors.officerName}</span>
                   </p>
@@ -366,7 +366,7 @@ export const LoginPage: React.FC = () => {
             <div>
               <label
                 htmlFor={authMode === 'login' ? 'email' : 'officialEmail'}
-                className="block text-xs font-semibold text-[#1F2328] mb-1.5"
+                className="block text-xs font-semibold text-[#1F2328] mb-1.5 font-dmsans"
               >
                 {authMode === 'login' ? 'Email' : 'Official Email'} <span className="text-[#DC2626]">*</span>
               </label>
@@ -390,16 +390,16 @@ export const LoginPage: React.FC = () => {
                   placeholder={authMode === 'login' ? 'Enter email' : 'Enter official email'}
                   aria-invalid={!!errors.email}
                   aria-describedby={errors.email ? 'email-error' : undefined}
-                  className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] transition-colors focus:bg-white focus:outline-none ${
+                  className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] font-dmsans transition-colors focus:bg-white focus:outline-none ${
                     errors.email
                       ? 'border-[#DC2626] focus:border-[#DC2626]'
-                      : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                      : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                   }`}
                   required
                 />
               </div>
               {errors.email && (
-                <p id="email-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                <p id="email-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   <span>{errors.email}</span>
                 </p>
@@ -411,7 +411,7 @@ export const LoginPage: React.FC = () => {
               <div className="flex items-center justify-between mb-1.5">
                 <label
                   htmlFor="password"
-                  className="block text-xs font-semibold text-[#1F2328]"
+                  className="block text-xs font-semibold text-[#1F2328] font-dmsans"
                 >
                   Password <span className="text-[#DC2626]">*</span>
                 </label>
@@ -423,7 +423,7 @@ export const LoginPage: React.FC = () => {
                         'Please contact the Central Legal Metrology Helpdesk at 1800-11-4000 or your Divisional Controller to reset credentials.'
                       )
                     }
-                    className="text-[11px] text-[#FF5A1F] hover:underline cursor-pointer"
+                    className="text-[11px] text-[#7C3AED] hover:text-[#6D28D9] hover:underline cursor-pointer font-dmsans"
                   >
                     Forgot password?
                   </button>
@@ -449,10 +449,10 @@ export const LoginPage: React.FC = () => {
                   placeholder={authMode === 'login' ? 'Enter password' : 'Create password (min 6 chars)'}
                   aria-invalid={!!errors.password}
                   aria-describedby={errors.password ? 'password-error' : undefined}
-                  className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-9 py-2 text-xs text-[#1F2328] transition-colors focus:bg-white focus:outline-none ${
+                  className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-9 py-2 text-xs text-[#1F2328] font-dmsans transition-colors focus:bg-white focus:outline-none ${
                     errors.password
                       ? 'border-[#DC2626] focus:border-[#DC2626]'
-                      : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                      : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                   }`}
                   required
                 />
@@ -466,7 +466,7 @@ export const LoginPage: React.FC = () => {
                 </button>
               </div>
               {errors.password && (
-                <p id="password-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                <p id="password-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   <span>{errors.password}</span>
                 </p>
@@ -481,7 +481,7 @@ export const LoginPage: React.FC = () => {
                       setAuthMode('signup');
                       setErrors({});
                     }}
-                    className="text-[11px] text-[#FF5A1F] hover:underline cursor-pointer"
+                    className="text-[11px] text-[#7C3AED] hover:text-[#6D28D9] hover:underline cursor-pointer font-dmsans"
                   >
                     Create account
                   </button>
@@ -494,7 +494,7 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-xs font-semibold text-[#1F2328] mb-1.5"
+                  className="block text-xs font-semibold text-[#1F2328] mb-1.5 font-dmsans"
                 >
                   Confirm Password <span className="text-[#DC2626]">*</span>
                 </label>
@@ -518,16 +518,16 @@ export const LoginPage: React.FC = () => {
                     placeholder="Confirm password"
                     aria-invalid={!!errors.confirmPassword}
                     aria-describedby={errors.confirmPassword ? 'confirmPassword-error' : undefined}
-                    className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] transition-colors focus:bg-white focus:outline-none ${
+                    className={`w-full bg-[#FAF9F7] border rounded-lg pl-9 pr-3 py-2 text-xs text-[#1F2328] font-dmsans transition-colors focus:bg-white focus:outline-none ${
                       errors.confirmPassword
                         ? 'border-[#DC2626] focus:border-[#DC2626]'
-                        : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                        : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                     }`}
                     required
                   />
                 </div>
                 {errors.confirmPassword && (
-                  <p id="confirmPassword-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                  <p id="confirmPassword-error" className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                     <AlertCircle className="w-3 h-3 shrink-0" />
                     <span>{errors.confirmPassword}</span>
                   </p>
@@ -540,13 +540,13 @@ export const LoginPage: React.FC = () => {
             {/* ========================================================================= */}
             {authMode === 'signup' && (
               <div className="pt-2">
-                <div className="bg-[#FAF9F7] border border-[#E5E2DD] rounded-xl p-3.5 space-y-3">
+                <div className="bg-[#FAF9F7] border border-[#E5E2DD] rounded-xl p-3.5 space-y-3 font-dmsans">
                   <div className="flex items-center justify-between pb-1 border-b border-[#E5E2DD]/80">
-                    <div className="flex items-center space-x-1.5 text-xs font-bold text-[#1F2328]">
-                      <MapPin className="w-3.5 h-3.5 text-[#FF5A1F]" />
+                    <div className="flex items-center space-x-1.5 text-xs font-bold text-[#1F2328] font-poppins">
+                      <MapPin className="w-3.5 h-3.5 text-[#7C3AED]" />
                       <span>Jurisdiction</span>
                     </div>
-                    <span className="text-[10px] font-semibold text-[#5F6368] bg-white border border-[#E5E2DD] px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-[#5F6368] bg-white border border-[#E5E2DD] px-2 py-0.5 rounded-full font-dmsans">
                       Country: India
                     </span>
                   </div>
@@ -555,7 +555,7 @@ export const LoginPage: React.FC = () => {
                   <div>
                     <label
                       htmlFor="stateSelect"
-                      className="block text-[11px] font-semibold text-[#1F2328] mb-1"
+                      className="block text-[11px] font-semibold text-[#1F2328] mb-1 font-dmsans"
                     >
                       State / Union Territory <span className="text-[#DC2626]">*</span>
                     </label>
@@ -564,10 +564,10 @@ export const LoginPage: React.FC = () => {
                       name="state"
                       value={selectedState}
                       onChange={(e) => handleStateChange(e.target.value)}
-                      className={`w-full bg-white border rounded-lg px-3 py-2 text-xs text-[#1F2328] cursor-pointer focus:outline-none ${
+                      className={`w-full bg-white border rounded-lg px-3 py-2 text-xs text-[#1F2328] font-dmsans cursor-pointer focus:outline-none ${
                         errors.state
                           ? 'border-[#DC2626] focus:border-[#DC2626]'
-                          : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                          : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                       }`}
                     >
                       <option value="">Select State ▼</option>
@@ -578,7 +578,7 @@ export const LoginPage: React.FC = () => {
                       ))}
                     </select>
                     {errors.state && (
-                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         <span>{errors.state}</span>
                       </p>
@@ -589,7 +589,7 @@ export const LoginPage: React.FC = () => {
                   <div>
                     <label
                       htmlFor="citySelect"
-                      className="block text-[11px] font-semibold text-[#1F2328] mb-1"
+                      className="block text-[11px] font-semibold text-[#1F2328] mb-1 font-dmsans"
                     >
                       City / District <span className="text-[#DC2626]">*</span>
                     </label>
@@ -599,10 +599,10 @@ export const LoginPage: React.FC = () => {
                       value={selectedCity}
                       disabled={!selectedState || availableDistricts.length === 0}
                       onChange={(e) => handleCityChange(e.target.value)}
-                      className={`w-full bg-white border rounded-lg px-3 py-2 text-xs text-[#1F2328] cursor-pointer focus:outline-none disabled:bg-[#F0EDE8] disabled:cursor-not-allowed ${
+                      className={`w-full bg-white border rounded-lg px-3 py-2 text-xs text-[#1F2328] font-dmsans cursor-pointer focus:outline-none disabled:bg-[#F0EDE8] disabled:cursor-not-allowed ${
                         errors.city
                           ? 'border-[#DC2626] focus:border-[#DC2626]'
-                          : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                          : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                       }`}
                     >
                       <option value="">Select City / District ▼</option>
@@ -613,7 +613,7 @@ export const LoginPage: React.FC = () => {
                       ))}
                     </select>
                     {errors.city && (
-                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         <span>{errors.city}</span>
                       </p>
@@ -624,7 +624,7 @@ export const LoginPage: React.FC = () => {
                   <div>
                     <label
                       htmlFor="pinCode"
-                      className="block text-[11px] font-semibold text-[#1F2328] mb-1"
+                      className="block text-[11px] font-semibold text-[#1F2328] mb-1 font-dmsans"
                     >
                       PIN Code <span className="text-[#DC2626]">*</span>
                     </label>
@@ -649,12 +649,12 @@ export const LoginPage: React.FC = () => {
                       className={`w-full bg-white border rounded-lg px-3 py-2 text-xs text-[#1F2328] font-mono focus:outline-none ${
                         errors.pinCode
                           ? 'border-[#DC2626] focus:border-[#DC2626]'
-                          : 'border-[#E5E2DD] focus:border-[#FF5A1F]'
+                          : 'border-[#E5E2DD] focus:border-[#7C3AED]'
                       }`}
                       required
                     />
                     {errors.pinCode && (
-                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1">
+                      <p className="text-[11px] text-[#DC2626] mt-1 flex items-center gap-1 font-dmsans">
                         <AlertCircle className="w-3 h-3 shrink-0" />
                         <span>{errors.pinCode}</span>
                       </p>
@@ -670,7 +670,7 @@ export const LoginPage: React.FC = () => {
               variant="primary"
               size="md"
               disabled={isSubmitting}
-              className="w-full mt-2"
+              className="w-full mt-2 font-poppins font-semibold"
             >
               {authMode === 'login' ? 'Log In' : 'Sign Up'}
             </Button>
@@ -679,7 +679,7 @@ export const LoginPage: React.FC = () => {
             {/* INSTANT DEMO LOGINS SECTION */}
             {/* ========================================================================= */}
             <div className="pt-4 border-t border-[#E5E2DD]">
-              <span className="text-[11px] font-bold text-[#5F6368] uppercase tracking-wider block mb-2 text-center">
+              <span className="text-[11px] font-bold text-[#5F6368] uppercase tracking-wider block mb-2 text-center font-poppins">
                 INSTANT DEMO LOGINS
               </span>
               <div className="grid grid-cols-2 gap-2">
@@ -695,12 +695,12 @@ export const LoginPage: React.FC = () => {
                       '422001'
                     )
                   }
-                  className="p-2.5 bg-[#FAF9F7] hover:bg-[#FFF1EA] border border-[#E5E2DD] hover:border-[#FF5A1F]/40 rounded-lg text-left transition cursor-pointer group"
+                  className="p-2.5 bg-[#FAF9F7] hover:bg-[#F5F3FF] border border-[#E5E2DD] hover:border-[#7C3AED]/40 rounded-lg text-left transition cursor-pointer group"
                 >
-                  <p className="font-semibold text-xs text-[#1F2328] group-hover:text-[#FF5A1F]">
+                  <p className="font-semibold text-xs text-[#1F2328] group-hover:text-[#7C3AED] font-poppins">
                     Demo Officer
                   </p>
-                  <p className="text-[10px] text-[#5F6368] truncate mt-0.5">
+                  <p className="text-[10px] text-[#5F6368] truncate mt-0.5 font-dmsans">
                     Rohit Patil • Nashik
                   </p>
                 </button>
@@ -716,12 +716,12 @@ export const LoginPage: React.FC = () => {
                       '400001'
                     )
                   }
-                  className="p-2.5 bg-[#FAF9F7] hover:bg-[#FFF1EA] border border-[#E5E2DD] hover:border-[#FF5A1F]/40 rounded-lg text-left transition cursor-pointer group"
+                  className="p-2.5 bg-[#FAF9F7] hover:bg-[#F5F3FF] border border-[#E5E2DD] hover:border-[#7C3AED]/40 rounded-lg text-left transition cursor-pointer group"
                 >
-                  <p className="font-semibold text-xs text-[#1F2328] group-hover:text-[#FF5A1F]">
+                  <p className="font-semibold text-xs text-[#1F2328] group-hover:text-[#7C3AED] font-poppins">
                     Demo Inspector
                   </p>
-                  <p className="text-[10px] text-[#5F6368] truncate mt-0.5">
+                  <p className="text-[10px] text-[#5F6368] truncate mt-0.5 font-dmsans">
                     Dr. Priya Nambiar • Mumbai
                   </p>
                 </button>
@@ -732,7 +732,7 @@ export const LoginPage: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-4 text-xs text-[#5F6368] border-t border-[#E5E2DD]/60">
+      <footer className="text-center py-4 text-xs text-[#5F6368] border-t border-[#E5E2DD]/60 font-dmsans">
         © 2026 Legal Metrology Department • LegalMetro Compliance Scanner (LMCS)
       </footer>
     </div>
