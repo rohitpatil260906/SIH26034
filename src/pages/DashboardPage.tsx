@@ -158,8 +158,18 @@ export const DashboardPage: React.FC = () => {
   // Recent violations flattened
   const allViolations = inspections.flatMap((i) => i.violations || []).slice(0, 4);
 
-  const handleStartScan = () => {
+  const handleStartScan = async () => {
     startNewInspection(undefined, 2);
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        // Direct user-gesture trigger for browser camera permission
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        (window as any).__activeCameraStream = stream;
+      }
+    } catch (err: any) {
+      console.warn('[Dashboard] Camera request on scan button click:', err);
+      (window as any).__cameraInitialError = err;
+    }
     navigate('/new-inspection?step=2&camera=open');
   };
 

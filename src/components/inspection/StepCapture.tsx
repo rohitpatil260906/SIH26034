@@ -43,7 +43,6 @@ import { getGeminiApiKey, setGeminiApiKey, removeGeminiApiKey } from '../../serv
 export const StepCapture: React.FC = () => {
   const {
     currentInspection,
-    selectedSamplePackage,
     addImageToInspection,
     removeImageFromInspection,
     updateInspectionDetails,
@@ -118,7 +117,7 @@ export const StepCapture: React.FC = () => {
   };
 
   const currentImage = currentInspection?.images[activeSurfaceIndex] || currentInspection?.images[0];
-  const svgMockType = selectedSamplePackage?.images?.[activeSurfaceIndex]?.svgMock || selectedSamplePackage?.images?.[0]?.svgMock;
+  const svgMockType = 'front-mustard';
 
   // Analyze image quality whenever the active photo changes (12 automated checks)
   useEffect(() => {
@@ -353,7 +352,18 @@ export const StepCapture: React.FC = () => {
                 type="button"
                 variant="primary"
                 size="md"
-                onClick={() => setIsCameraModalOpen(true)}
+                onClick={async () => {
+                  try {
+                    if (navigator?.mediaDevices?.getUserMedia) {
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                      (window as any).__activeCameraStream = stream;
+                    }
+                  } catch (err: any) {
+                    console.warn('[StepCapture] Camera request on button click:', err);
+                    (window as any).__cameraInitialError = err;
+                  }
+                  setIsCameraModalOpen(true);
+                }}
                 className="w-full flex items-center justify-center space-x-2"
               >
                 <Camera className="w-4 h-4 text-white" />

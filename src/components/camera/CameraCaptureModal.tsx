@@ -6,7 +6,6 @@ import {
   X,
   Check,
   RefreshCw,
-  AlertCircle,
   Upload,
   Timer,
   ScanLine,
@@ -34,6 +33,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user'); // Default to 'user' for laptop webcam compatibility
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [errorTitle, setErrorTitle] = useState<string | null>(null);
   const [isPermissionDenied, setIsPermissionDenied] = useState<boolean>(false);
   const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(false);
   const [selectedSurface, setSelectedSurface] = useState<SurfaceType>(surface || defaultSurface);
@@ -114,22 +114,33 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         setSelectedDeviceId(videoInputs[0].deviceId);
       }
     } catch (e) {
-      console.warn('Could not enumerate video devices:', e);
+      console.warn('[CameraCaptureModal] Could not enumerate video devices:', e);
     }
   }, [selectedDeviceId]);
 
-  // Guaranteed clean camera shutdown
+  // Guaranteed clean camera track shutdown
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         try {
           track.stop();
         } catch (e) {
-          console.warn('Error stopping track:', e);
+          console.warn('[CameraCaptureModal] Error stopping streamRef track:', e);
         }
       });
       streamRef.current = null;
     }
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('[CameraCaptureModal] Error stopping stream track:', e);
+        }
+      });
+    }
+    (window as any).__activeCameraStream = null;
+    (window as any).__cameraInitialError = null;
     setStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -139,141 +150,190 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       countdownTimerRef.current = null;
     }
     setCountdown(null);
-  }, []);
+  }, [stream]);
 
-  // Start device camera via navigator.mediaDevices.getUserMedia
-  const startCamera = useCallback(async (deviceId?: string, mode?: 'environment' | 'user') => {
+  // Start device camera via navigator.mediaDevices.getUserMedia({ video: true })
+  const startCamera = useCallback(async (deviceId?: string) => {
     setIsLoadingCamera(true);
     setCameraError(null);
+    setErrorTitle(null);
     setIsPermissionDenied(false);
+
+    // 1. Check if camera stream was already requested by the button click
+    const preStream = (window as any).__activeCameraStream as MediaStream | undefined;
+    if (preStream && preStream.active) {
+      (window as any).__activeCameraStream = null;
+      streamRef.current = preStream;
+      setStream(preStream);
+      setIsLoadingCamera(false);
+      setCameraError(null);
+      setErrorTitle(null);
+      setIsPermissionDenied(false);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = preStream;
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.play().catch(playErr => {
+          console.warn('[CameraCaptureModal] Video play error with pre-stream:', playErr);
+        });
+      }
+      refreshDevices();
+      return;
+    }
+
+    // 2. Check if an error occurred during button click trigger
+    let caughtError: any = (window as any).__cameraInitialError || null;
+    (window as any).__cameraInitialError = null;
 
     // Stop any existing stream before opening a new one
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current.getTracks().forEach(t => {
+        try {
+          t.stop();
+        } catch {}
+      });
       streamRef.current = null;
-      setStream(null);
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Verify valid browser context (localhost or HTTPS)
+    const isSecureContext =
+      window.isSecureContext ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '::1';
+
+    if (!isSecureContext) {
       setIsLoadingCamera(false);
-      setCameraError('Camera API is not supported by your browser or in this context (requires HTTPS or localhost).');
+      setErrorTitle('Secure Context Required');
+      setCameraError(
+        'Camera access is restricted to secure origins (HTTPS or localhost). Please access the application via http://localhost:5174 or HTTPS.'
+      );
       return;
     }
 
-    const preferredMode = mode || facingMode;
+    // Check whether navigator.mediaDevices and getUserMedia are available
+    if (!navigator?.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setIsLoadingCamera(false);
+      setErrorTitle('Camera Not Supported');
+      setCameraError(
+        'The Camera API (navigator.mediaDevices.getUserMedia) is not supported by your current browser.'
+      );
+      return;
+    }
+
     let acquiredStream: MediaStream | null = null;
-    let lastError: any = null;
 
-    // 1. Try explicit device ID if selected
-    if (deviceId && deviceId.trim()) {
+    // Request camera using browser's real camera API
+    if (!caughtError) {
       try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: { exact: deviceId },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        });
-      } catch (err1) {
-        try {
+        if (deviceId && deviceId.trim()) {
+          try {
+            acquiredStream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: deviceId } },
+              audio: false
+            });
+          } catch {
+            acquiredStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false
+            });
+          }
+        } else {
           acquiredStream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: deviceId } },
+            video: true,
             audio: false
           });
-        } catch (err2: any) {
-          console.warn('Selected deviceId failed, falling back:', err2);
-          lastError = err2;
         }
+      } catch (err: any) {
+        console.error('[CameraCaptureModal] getUserMedia failed with error:', err?.name, err?.message, err);
+        caughtError = err;
       }
     }
 
-    // 2. Try with preferred facingMode (ideal 1080p/720p)
-    if (!acquiredStream) {
-      try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: preferredMode },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        });
-      } catch (err3) {
-        try {
-          acquiredStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: preferredMode
-            },
-            audio: false
-          });
-        } catch (err4: any) {
-          console.warn('FacingMode constraint failed, trying basic video:', err4);
-          lastError = err4;
-        }
-      }
-    }
-
-    // 3. Fallback: universal basic video: true constraint
-    if (!acquiredStream) {
-      try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false
-        });
-      } catch (err5: any) {
-        console.warn('Basic video request failed:', err5);
-        lastError = err5;
-      }
-    }
-
+    // Attach stream if permission granted and camera stream acquired
     if (acquiredStream) {
       streamRef.current = acquiredStream;
       setStream(acquiredStream);
       setIsLoadingCamera(false);
       setCameraError(null);
+      setErrorTitle(null);
       setIsPermissionDenied(false);
 
       if (videoRef.current) {
         videoRef.current.srcObject = acquiredStream;
-        videoRef.current.play().catch(err => {
-          console.warn('Video autoplay aborted:', err);
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.play().catch(playErr => {
+          console.warn('[CameraCaptureModal] Video play error:', playErr);
         });
       }
 
       refreshDevices();
-    } else if (lastError) {
+    } else if (caughtError) {
       setIsLoadingCamera(false);
-      const isDenied =
-        lastError.name === 'NotAllowedError' ||
-        lastError.name === 'PermissionDeniedError' ||
-        lastError.message?.toLowerCase().includes('permission') ||
-        lastError.message?.toLowerCase().includes('denied');
+      const errName = caughtError.name || '';
+      const errMsg = caughtError.message || '';
 
-      if (isDenied) {
+      // Differentiate errors according to actual cause
+      if (
+        errName === 'NotAllowedError' ||
+        errName === 'PermissionDeniedError' ||
+        errMsg.toLowerCase().includes('permission') ||
+        errMsg.toLowerCase().includes('denied')
+      ) {
         setIsPermissionDenied(true);
-        setCameraError('Camera permission is required to scan a package. Please allow camera access in your browser and click "Retry Camera".');
-      } else if (lastError.name === 'NotFoundError' || lastError.name === 'DevicesNotFoundError') {
-        setCameraError('No camera device was detected on your system. Please connect a webcam and click "Retry Camera".');
-      } else if (lastError.name === 'NotReadableError' || lastError.name === 'TrackStartError') {
-        setCameraError('Camera is already in use by another application or tab. Please close other software using the camera and click "Retry Camera".');
+        setErrorTitle('Camera Permission Required');
+        setCameraError(
+          'Camera permission is required to scan a package. Please allow camera access in your browser and click "Retry Camera".'
+        );
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        setIsPermissionDenied(false);
+        setErrorTitle('No Camera Detected');
+        setCameraError(
+          'No camera device was detected on your system. Please connect a webcam and click "Retry Camera".'
+        );
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+        setIsPermissionDenied(false);
+        setErrorTitle('Camera In Use');
+        setCameraError(
+          'Your camera is currently in use by another application or browser tab. Please close other software using the camera and click "Retry Camera".'
+        );
+      } else if (errName === 'SecurityError') {
+        setIsPermissionDenied(false);
+        setErrorTitle('Security Restriction');
+        setCameraError(
+          'Camera access is restricted by your browser security policy. Make sure you are using localhost or HTTPS.'
+        );
+      } else if (errName === 'TypeError') {
+        setIsPermissionDenied(false);
+        setErrorTitle('Camera Configuration Error');
+        setCameraError(
+          'Invalid camera constraints requested. Click "Retry Camera" to reset and try again.'
+        );
       } else {
-        setCameraError(lastError.message || 'Unable to access the device camera. Please check your webcam connection and browser settings.');
+        setIsPermissionDenied(false);
+        setErrorTitle('Camera Unavailable');
+        setCameraError(
+          errMsg || 'Unable to access the device camera. Please check your webcam connection and browser settings.'
+        );
       }
     }
-  }, [facingMode, refreshDevices]);
+  }, [refreshDevices]);
 
   // Synchronize stream with video element
   useEffect(() => {
     if (videoRef.current && stream && !capturedImage) {
       videoRef.current.srcObject = stream;
+      videoRef.current.muted = true;
+      videoRef.current.playsInline = true;
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch(err => {
-          console.warn('Video autoplay aborted:', err);
+          console.warn('[CameraCaptureModal] Video autoplay aborted:', err);
         });
       }
     }
@@ -285,12 +345,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       stopCamera();
       setCapturedImage(null);
       setCameraError(null);
+      setErrorTitle(null);
       setIsPermissionDenied(false);
       return;
     }
 
     setSelectedSurface(surface || defaultSurface);
-    startCamera(selectedDeviceId || undefined, facingMode);
+    startCamera(selectedDeviceId || undefined);
 
     return () => {
       stopCamera();
@@ -363,11 +424,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   const handleRetake = () => {
     setCapturedImage(null);
-    startCamera(selectedDeviceId || undefined, facingMode);
+    startCamera(selectedDeviceId || undefined);
   };
 
   const handleConfirmPhoto = () => {
     if (capturedImage) {
+      stopCamera();
       onCapture(capturedImage, selectedSurface);
       onClose();
     }
@@ -387,10 +449,30 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   };
 
-  const handleSwitchLens = () => {
+  const handleSwitchLens = async () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
-    startCamera(undefined, nextMode);
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        const switchedStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextMode },
+          audio: false
+        });
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(t => t.stop());
+        }
+        streamRef.current = switchedStream;
+        setStream(switchedStream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = switchedStream;
+          videoRef.current.muted = true;
+          videoRef.current.playsInline = true;
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    } catch {
+      startCamera();
+    }
   };
 
   if (!isOpen) return null;
@@ -407,30 +489,27 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-bold text-white tracking-wide">
-                  Live Device Camera & Packaging Scanner
+                  Live Camera Scanner
                 </h3>
                 {stream && !cameraError && (
-                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold flex items-center space-x-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>LIVE WEBCAM</span>
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold">
+                    LIVE
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400">
-                Legal Metrology Packaging Inspection • High-Definition Optical Frame Capture
+                Legal Metrology Packaging Inspection • Live Webcam Feed
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              title="Close Camera"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            title="Close Camera"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Viewport Area */}
@@ -449,65 +528,62 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
           )}
 
-          {/* Hidden Canvas for video frame extraction */}
+          {/* Hidden Canvas for standard video extraction */}
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Case 1: Photo has been captured - Review & Confirm Screen */}
+          {/* Case 1: Photo has been shot - Review & Confirm Screen */}
           {capturedImage ? (
             <div className="relative w-full h-full flex flex-col items-center justify-center p-4 bg-slate-950">
               <img
                 src={capturedImage}
-                alt="Captured Commodity Label"
+                alt="Captured Package Label"
                 className="max-h-[360px] w-auto object-contain rounded-lg border-2 border-emerald-500/50 shadow-2xl"
               />
               <div className="absolute top-4 left-4 bg-emerald-900/90 border border-emerald-500 text-emerald-200 px-3 py-1 rounded-md text-xs font-semibold flex items-center space-x-2 shadow-lg">
                 <Check className="w-4 h-4 text-emerald-300" />
-                <span>Photo Captured From Webcam • Ready for OCR & Rule Engine</span>
+                <span>Photo Captured Successfully • Ready for Inspection</span>
               </div>
             </div>
           ) : cameraError ? (
             /* Case 2: Camera Permission / Device Error Screen */
-            <div className="p-8 text-center space-y-4 max-w-md">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
-                isPermissionDenied 
-                  ? 'bg-red-500/20 border border-red-500/40 text-red-400' 
-                  : 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
-              }`}>
-                {isPermissionDenied ? (
-                  <Lock className="w-7 h-7" />
-                ) : (
-                  <CameraOff className="w-7 h-7" />
-                )}
+            <div className="p-8 text-center space-y-4 max-w-md mx-auto">
+              <div
+                className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
+                  isPermissionDenied
+                    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
+                    : 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
+                }`}
+              >
+                {isPermissionDenied ? <Lock className="w-7 h-7" /> : <CameraOff className="w-7 h-7" />}
               </div>
               <div>
                 <h4 className="text-base font-bold text-white">
-                  {isPermissionDenied ? 'Camera Permission Required' : 'Camera Unavailable'}
+                  {errorTitle || (isPermissionDenied ? 'Camera Permission Required' : 'Camera Unavailable')}
                 </h4>
                 <p className="text-xs text-slate-300 mt-2 leading-relaxed">
                   {cameraError}
                 </p>
                 {isPermissionDenied && (
-                  <p className="text-[11px] text-slate-400 mt-2">
-                    To allow access, look for the camera/lock icon in your browser address bar and switch Camera permissions to "Allow".
+                  <p className="text-[11px] text-amber-300/90 mt-2.5 bg-amber-950/40 border border-amber-800/40 rounded p-2.5 leading-normal">
+                    To allow access, look for the camera or lock/tune icon in your browser address bar, switch Camera permissions to &quot;Allow&quot;, and click &quot;Retry Camera&quot;.
                   </p>
                 )}
               </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
+              <div className="pt-3 flex flex-col sm:flex-row gap-2.5 justify-center">
                 <Button
                   variant="primary"
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                  leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-                  onClick={() => startCamera(selectedDeviceId || undefined, facingMode)}
+                  size="md"
+                  leftIcon={<RefreshCw className="w-4 h-4" />}
+                  onClick={() => startCamera(selectedDeviceId || undefined)}
                 >
                   Retry Camera
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="md"
                   className="text-slate-200 border-slate-700 hover:bg-slate-800"
-                  leftIcon={<Upload className="w-3.5 h-3.5" />}
+                  leftIcon={<Upload className="w-4 h-4" />}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Upload Photo Instead
@@ -521,7 +597,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 space-y-3">
                   <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
                   <p className="text-xs text-slate-300 font-medium">
-                    Connecting to Webcam & Opening Live Stream...
+                    Connecting to Camera & Opening Live Stream...
                   </p>
                 </div>
               )}
@@ -533,7 +609,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 muted
                 onLoadedMetadata={() => {
                   if (videoRef.current) {
-                    videoRef.current.play().catch(() => {});
+                    videoRef.current.play().catch(err => console.warn('Video autoplay aborted:', err));
                   }
                 }}
                 className="w-full h-full object-contain max-h-[440px]"
