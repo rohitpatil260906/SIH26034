@@ -227,26 +227,26 @@ export const StepCapture: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner: Docket Info */}
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="bg-[#FFFCF8] border border-[#E5E2DD] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center space-x-3">
-          <div className="p-2 rounded-md bg-[#0f2942] text-white">
-            <ScanLine className="w-5 h-5 text-amber-400" />
+          <div className="p-2 rounded-lg bg-[#F5F3FF] text-[#6D28D9]">
+            <ScanLine className="w-5 h-5 text-[#6D28D9]" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-slate-900 text-xs font-mono">
+              <span className="font-bold text-[#1F2328] text-xs font-mono">
                 DOCKET: {currentInspection.id}
               </span>
               {currentInspection.productName && (
-                <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-800">
+                <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-[#FAF9F7] text-[#5F6368] border border-[#E5E2DD]">
                   {currentInspection.productName}
                 </span>
               )}
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center">
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0] flex items-center">
                 <Check className="w-3 h-3 mr-0.5" /> AI MULTI-SURFACE READY
               </span>
             </div>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <p className="text-xs text-[#5F6368] mt-0.5">
               Capture or upload packaging label images for each packaging face (PDP, Back Panel, etc.)
             </p>
           </div>
@@ -258,7 +258,7 @@ export const StepCapture: React.FC = () => {
           <select
             value={selectedSurfaceTag}
             onChange={(e) => setSelectedSurfaceTag(e.target.value as SurfaceType)}
-            className="text-xs font-medium bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
+            className="text-xs font-medium bg-white border border-slate-300 rounded px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#7C3AED]"
           >
             <option value="Front (PDP)">Front (PDP)</option>
             <option value="Back Panel">Back Panel</option>
@@ -270,23 +270,23 @@ export const StepCapture: React.FC = () => {
       </div>
 
       {/* AI Accuracy & Vision Engine Status Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-[#0f2942] to-slate-900 text-white rounded-lg p-3.5 shadow-sm border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="bg-white text-[#1F2328] rounded-xl p-4 shadow-2xs border border-[#E5E2DD] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
-          <div className={`p-2 rounded-md ${isGeminiActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
+          <div className={`p-2 rounded-lg ${isGeminiActive ? 'bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0]' : 'bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE]'}`}>
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold uppercase tracking-wide">
+              <span className="text-xs font-bold uppercase tracking-wide text-[#1F2328]">
                 {isGeminiActive ? 'Google Gemini 2.0 Flash Vision AI: ACTIVE' : 'Local Computer Vision Engine: ACTIVE'}
               </span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                isGeminiActive ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                isGeminiActive ? 'bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0]' : 'bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE]'
               }`}>
                 {isGeminiActive ? '100% Multimodal Accuracy' : 'Edge Multi-Pass OCR'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-300 mt-0.5">
+            <p className="text-xs text-[#5F6368] mt-0.5">
               {isGeminiActive
                 ? 'Deep neural vision analyzes complex packaging, warped text, and damaged labels with zero false defaults.'
                 : 'Preprocessing contrast stretching and Laplacian filters enabled. For 100% precision on any product photo, connect free Gemini API Key.'}
@@ -294,14 +294,16 @@ export const StepCapture: React.FC = () => {
           </div>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={() => setIsGeminiModalOpen(true)}
-          className="text-xs font-semibold px-3 py-1.5 rounded bg-white hover:bg-slate-100 text-[#0f2942] border border-slate-200 shadow-2xs transition shrink-0 cursor-pointer flex items-center space-x-1.5"
+          className="shrink-0 flex items-center space-x-1.5"
         >
-          <Key className="w-3.5 h-3.5 text-amber-600" />
+          <Key className="w-3.5 h-3.5 text-[#6D28D9]" />
           <span>{isGeminiActive ? 'Gemini Key Configured ✓' : 'Connect Gemini Key (Free)'}</span>
-        </button>
+        </Button>
       </div>
 
       {/* Real-Time Optical Ingest Alert */}
@@ -346,14 +348,16 @@ export const StepCapture: React.FC = () => {
             />
             <CardContent className="space-y-4">
               {/* Primary Action 1: Open Live Camera */}
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 onClick={() => setIsCameraModalOpen(true)}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-[#0f2942] hover:bg-[#163a5f] text-white text-xs font-bold rounded-lg shadow-sm transition transform active:scale-95 cursor-pointer"
+                className="w-full flex items-center justify-center space-x-2"
               >
-                <Camera className="w-4 h-4 text-amber-400" />
+                <Camera className="w-4 h-4 text-white" />
                 <span>Open Device Camera & Photograph</span>
-              </button>
+              </Button>
 
               <div className="relative flex items-center justify-center">
                 <div className="border-t border-slate-200 w-full"></div>
@@ -602,14 +606,14 @@ export const StepCapture: React.FC = () => {
                         onClick={() => setActiveSurfaceIndex(idx)}
                         className={`p-2.5 rounded-lg border transition text-xs flex items-center justify-between cursor-pointer ${
                           isSelected
-                            ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                            : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                            ? 'bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE] shadow-2xs'
+                            : 'bg-white text-[#1F2328] border-[#E5E2DD] hover:bg-[#FAF9F7]'
                         }`}
                       >
                         <div className="flex items-center space-x-2.5 truncate mr-2">
                           <span
                             className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold shrink-0 ${
-                              isSelected ? 'bg-amber-400 text-slate-950' : 'bg-slate-100 text-slate-700'
+                              isSelected ? 'bg-[#7C3AED] text-white' : 'bg-[#FAF9F7] text-[#5F6368] border border-[#E5E2DD]'
                             }`}
                           >
                             {idx + 1}

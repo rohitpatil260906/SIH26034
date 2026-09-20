@@ -81,18 +81,18 @@ export const NewInspectionPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header Banner */}
-      <div className="border-b border-slate-200 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="border-b border-[#E5E2DD] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">New Packaged Commodity Inspection</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-[#1F2328] tracking-tight">Scan & Analyze Packaged Commodity</h1>
+          <p className="text-xs text-[#5F6368] mt-0.5">
             Step {activeStep} of 7: {stepNames[activeStep - 1]} • Legal Metrology (Packaged Commodities) Rules, 2011
           </p>
         </div>
         {currentInspection && (
-          <div className="text-xs text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded font-mono">
-            Docket: <strong className="text-slate-900">{currentInspection.id}</strong>
+          <div className="text-xs text-[#5F6368] bg-white border border-[#E5E2DD] px-3 py-1.5 rounded-lg font-mono shadow-2xs">
+            Docket: <strong className="text-[#1F2328]">{currentInspection.id}</strong>
           </div>
         )}
       </div>

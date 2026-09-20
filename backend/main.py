@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from .models import (
+    BoundingBox,
+    ExtractedLine,
     ImageQualityMetrics,
     ScanProcessRequest,
     ScanProcessResponse,
@@ -17,7 +19,10 @@ from .models import (
     LabelMeAnnotation,
     MeasurementValidation,
     BenchmarkEvaluationResponse,
-    SystemDiagnosticStatus
+    SystemDiagnosticStatus,
+    JurisdictionInfo,
+    UnitSalePriceInfo,
+    CanonicalField
 )
 from .services.cv_pipeline import (
     decode_base64_image,
@@ -38,6 +43,8 @@ from .services.ocr_engine import (
     get_easyocr_reader
 )
 from .services.text_processor import process_and_classify_text
+from .services.llm_extractor import get_ai_provider
+from .services.ml_service import ml_service
 from .services.rule_engine import (
     evaluate_legal_metrology_rules,
     load_statutory_rules_library
@@ -51,7 +58,12 @@ from .services.data_layer import (
     ViolationModel,
     AuditLogModel,
     SessionLocal,
-    verify_with_external_government_source
+    verify_with_external_government_source,
+    save_case_docket,
+    list_case_dockets,
+    get_case_docket_by_id,
+    delete_case_docket,
+    get_dashboard_metrics
 )
 from .services.report_generator import (
     generate_statutory_pdf_report,
@@ -251,8 +263,36 @@ def process_scan(request: ScanProcessRequest):
         raw_transcript += "\n" + "\n".join(client_lines)
 
     # ----------------------------------------------------
-    # STAGE 3.4 & 3.5: NLP POST-PROCESSING & FIELD CLASSIFICATION
+    # STAGE 3.4 & 3.5: AI/LLM EXTRACTION & ML CLASSIFICATION
     # ----------------------------------------------------
+    # 1. AI/LLM Structured Extraction Layer
+    ai_provider = get_ai_provider()
+    try:
+        llm_extracted = ai_provider.extract_structured_label_data(
+            raw_text=raw_transcript,
+            lines=[l.dict() for l in extracted_lines]
+        )
+    except Exception as e:
+        llm_extracted = {}
+
+    # 2. ML Classification Layer (Declaration Classifier, Category Classifier, Risk Module)
+    import numpy as np
+    mean_conf = float(np.mean([l.confidence for l in extracted_lines])) if extracted_lines else 0.85
+    ml_output = ml_service.process_ml_pipeline(
+        lines=[l.text for l in extracted_lines],
+        raw_transcript=raw_transcript,
+        product_name=request.images[0].get("file_name", "Packaged Commodity"),
+        extracted_fields=llm_extracted,
+        mean_ocr_conf=mean_conf,
+        is_blurred=is_degraded
+    )
+
+    # Tag extracted lines with ML classification
+    for idx, l in enumerate(extracted_lines):
+        if idx < len(ml_output["classified_lines"]):
+            l.classification = ml_output["classified_lines"][idx]["predicted_category"]
+
+    # 3. Deterministic NLP Post-Processing & Canonical Field Synthesis
     product_data, canonical_fields, evidence_map = process_and_classify_text(
         extracted_lines,
         raw_transcript,
@@ -279,6 +319,14 @@ def process_scan(request: ScanProcessRequest):
     # External Verification Abstraction
     ext_verif = "External verification: Not available"
 
+    # Extract structured statutory jurisdiction
+    req_jurisdiction = request.jurisdiction
+    if not req_jurisdiction and request.options and "jurisdiction" in request.options:
+        try:
+            req_jurisdiction = JurisdictionInfo(**request.options["jurisdiction"])
+        except Exception:
+            pass
+
     response = ScanProcessResponse(
         scan_id=scan_id,
         product_info=product_data,
@@ -294,6 +342,7 @@ def process_scan(request: ScanProcessRequest):
         measurement_validation=measurement_val,
         labelme_annotation=labelme_ann,
         external_verification=ext_verif,
+        jurisdiction=req_jurisdiction,
         timestamp=datetime.utcnow().isoformat()
     )
 
@@ -313,54 +362,11 @@ def process_scan(request: ScanProcessRequest):
         compliance_score=compliance_score
     )
 
-    # Save to SQLite / PostgreSQL
+    # Save complete docket to SQLite / PostgreSQL database
     try:
-        db = SessionLocal()
-        c_model = CaseDocketModel(
-            id=scan_id,
-            inspection_id=scan_id,
-            product_name=product_data.product_name,
-            brand=product_data.brand or "",
-            manufacturer=product_data.manufacturer.full_address,
-            status="Completed",
-            overall_status=overall_status,
-            compliance_score=compliance_score
-        )
-        db.add(c_model)
-        
-        for cf in canonical_fields:
-            f_model = ExtractedFieldModel(
-                case_id=scan_id,
-                field_name=cf.field_name,
-                statutory_name=cf.statutory_name,
-                extracted_value=cf.extracted_value,
-                ocr_confidence=cf.confidence,
-                overall_confidence=cf.confidence,
-                status=cf.status,
-                rule_reference=cf.rule_reference,
-                surface=surface
-            )
-            db.add(f_model)
-            
-        for chk in compliance_checks:
-            if chk.status == "FAIL":
-                v_model = ViolationModel(
-                    id=f"VIO-{uuid.uuid4().hex[:8].upper()}",
-                    case_id=scan_id,
-                    rule_reference=chk.rule_no,
-                    violation_type=chk.rule_title,
-                    statutory_clause=chk.sub_rule,
-                    description=chk.detected_declaration,
-                    severity="High" if "MRP" in chk.rule_no else "Medium",
-                    penal_section=chk.section_penalty or "Section 36(1)",
-                    recommended_penalty="Compounding fee: ₹25,000"
-                )
-                db.add(v_model)
-                
-        db.commit()
-        db.close()
+        save_case_docket(response.dict())
     except Exception as db_err:
-        print(f"Database write note: {db_err}")
+        print(f"Database save note: {db_err}")
 
     return response
 
@@ -397,7 +403,7 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         manufacturer={"name": "Aero Care Personal Products LLP", "full_address": "Survey 284/2, Naroli, D&NH - 396235", "pin_code": "396235"},
         net_quantity={"value": 50.0, "unit": "g", "raw_text": "Net Qty: 50 g"},
         mrp={"amount": 499.0, "raw_text": "₹ 499.00 (inclusive of all taxes)"},
-        unit_sale_price="₹ 9.98 / g",
+        unit_sale_price=UnitSalePriceInfo(raw_text="₹ 9.98 / g", value_per_unit="₹ 9.98 / g", is_exempt=False),
         dates={"mfd": "02/2026", "expiry": "01/2028"},
         batch_number="B-LK2026",
         consumer_care={"phone": "1800-10-22-221", "email": "lever.care@unilever.com"}
@@ -407,10 +413,10 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         scan_id=scan_id,
         product_info=prod_data,
         canonical_fields=[
-            CanonicalFieldItem(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.product_name, confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(b)"),
-            CanonicalFieldItem(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="50 g", confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(c) & Rule 13"),
-            CanonicalFieldItem(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 499.00 (incl. of all taxes)", confidence=0.99, status="DETECTED", rule_reference="Rule 6(1)(e)"),
-            CanonicalFieldItem(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value="Survey 284/2, Naroli, D&NH - 396235", confidence=0.98, status="DETECTED", rule_reference="Rule 6(1)(a) & Rule 10")
+            CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.product_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
+            CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="50 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
+            CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 499.00 (incl. of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
+            CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value="Survey 284/2, Naroli, D&NH - 396235", confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
         ],
         compliance_checks=checks,
         compliance_score=score,
@@ -447,8 +453,11 @@ def export_labelme_json(scan_id: str):
         raise HTTPException(status_code=404, detail="LabelMe annotation not available for this docket")
         
     return scan.labelme_annotation.dict()
-        
-    return scan.labelme_annotation.dict()
+
+@app.get("/api/reports/{scan_id}/labelme")
+def export_labelme_json_report_alias(scan_id: str):
+    """Alias for LabelMe JSON export under /api/reports route."""
+    return export_labelme_json(scan_id)
 
 @app.get("/api/rules")
 def get_legal_rules():
@@ -479,6 +488,59 @@ def get_legal_rules():
         }
         for c in checks
     ]
+
+@app.get("/api/scans")
+def list_scans(limit: int = 50, offset: int = 0):
+    """Retrieves list of all processed packaging scans from the SQLite database."""
+    dockets = list_case_dockets(limit=limit, offset=offset)
+    return {
+        "success": True,
+        "data": dockets,
+        "total": len(dockets)
+    }
+
+@app.get("/api/reports")
+def list_reports(limit: int = 50, offset: int = 0):
+    """Retrieves list of all saved inspection reports."""
+    dockets = list_case_dockets(limit=limit, offset=offset)
+    return {
+        "success": True,
+        "data": dockets,
+        "total": len(dockets)
+    }
+
+@app.post("/api/reports")
+def save_report(payload: Dict[str, Any]):
+    """Persists or finalizes an inspection report docket in SQLite."""
+    try:
+        res = save_case_docket(payload)
+        return {
+            "success": True,
+            "data": res,
+            "message": "Statutory inspection report saved successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/reports/{scan_id}")
+def delete_report(scan_id: str):
+    """Deletes an inspection docket and its associated evidence."""
+    success = delete_case_docket(scan_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Report docket not found")
+    return {
+        "success": True,
+        "message": f"Docket {scan_id} deleted successfully"
+    }
+
+@app.get("/api/dashboard/stats")
+def get_dashboard_stats():
+    """Retrieves live dynamic dashboard statistics calculated from the SQLite database."""
+    metrics = get_dashboard_metrics()
+    return {
+        "success": True,
+        "data": metrics
+    }
 
 @app.get("/api/reports/{scan_id}")
 def get_statutory_report_summary(scan_id: str):

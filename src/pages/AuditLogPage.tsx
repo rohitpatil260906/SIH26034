@@ -59,17 +59,17 @@ export const AuditLogPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E2DD] pb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">System Audit Log & Chain of Custody</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-[#1F2328] tracking-tight">System Audit Log & Chain of Custody</h1>
+          <p className="text-xs text-[#5F6368] mt-0.5">
             Cryptographically timestamped audit trail tracking every inspection event, manual override, and enforcement order
           </p>
         </div>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
-          leftIcon={<Download className="w-4 h-4" />}
+          leftIcon={<Download className="w-4 h-4 text-[#5F6368]" />}
           onClick={handleExportAuditCSV}
         >
           Export Official Audit Trail (CSV)
@@ -81,20 +81,20 @@ export const AuditLogPage: React.FC = () => {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="relative md:col-span-2">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#8A8F98] absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search audit actions, officer names, record IDs, or details..."
-                className="w-full bg-slate-50 border border-slate-300 rounded pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED]"
               />
             </div>
             <div>
               <select
                 value={moduleFilter}
                 onChange={(e) => setModuleFilter(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Modules</option>
                 {modules.map(m => (
@@ -106,7 +106,7 @@ export const AuditLogPage: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Event Severities</option>
                 <option value="Success">Success (Routine Event)</option>
@@ -121,63 +121,61 @@ export const AuditLogPage: React.FC = () => {
       {/* Audit Log Table */}
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800 border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+          <table className="w-full text-left text-xs text-[#1F2328] border-collapse">
+            <thead className="bg-[#FAF9F7] border-b border-[#E5E2DD] text-[11px] font-bold text-[#5F6368] uppercase tracking-wider">
               <tr>
-                <th className="py-3 px-3">Timestamp (IST)</th>
-                <th className="py-3 px-3">Enforcement Officer</th>
-                <th className="py-3 px-3">Action Executed</th>
-                <th className="py-3 px-3">Module</th>
-                <th className="py-3 px-3">Docket / Record</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Operational Details</th>
+                <th className="py-3 px-4">Timestamp & ID</th>
+                <th className="py-3 px-4">Officer / Principal</th>
+                <th className="py-3 px-4">Action Performed</th>
+                <th className="py-3 px-4">Module</th>
+                <th className="py-3 px-4">Record ID</th>
+                <th className="py-3 px-4">Audit Details</th>
+                <th className="py-3 px-4 text-center">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-[#F0EDE8] bg-white font-mono text-[11px]">
               {filteredLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                    {log.timestamp}
+                <tr key={log.id} className="hover:bg-[#FAF9F7] transition-colors">
+                  <td className="py-3 px-4 whitespace-nowrap text-[#5F6368]">
+                    <span className="block text-[#1F2328] font-bold">{log.timestamp}</span>
+                    <span className="text-[10px] text-[#8A8F98]">{log.id}</span>
                   </td>
-                  <td className="py-3 px-3 whitespace-nowrap">
-                    <span className="font-semibold text-slate-900 block">{log.user}</span>
-                    <span className="text-[10px] text-slate-400 font-mono block">{log.role}</span>
+                  <td className="py-3 px-4 font-sans font-medium text-[#1F2328] whitespace-nowrap">
+                    <span>{log.user}</span>
+                    <span className="block text-[10px] font-mono text-[#8A8F98]">{log.role}</span>
                   </td>
-                  <td className="py-3 px-3 font-medium text-slate-900">
+                  <td className="py-3 px-4 font-sans font-semibold text-[#1F2328] whitespace-nowrap">
                     {log.action}
                   </td>
-                  <td className="py-3 px-3">
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 font-mono border border-slate-200">
+                  <td className="py-3 px-4 font-sans text-[#5F6368]">
+                    <span className="inline-block px-2 py-0.5 rounded-md text-[10px] bg-[#FAF9F7] text-[#5F6368] border border-[#E5E2DD]">
                       {log.module}
                     </span>
                   </td>
-                  <td className="py-3 px-3 font-mono text-[11px] font-semibold text-slate-800 whitespace-nowrap">
+                  <td className="py-3 px-4 font-bold text-[#6D28D9]">
                     {log.recordId}
                   </td>
-                  <td className="py-3 px-3">
+                  <td className="py-3 px-4 font-sans text-[#5F6368] max-w-sm">
+                    {log.details}
+                  </td>
+                  <td className="py-3 px-4 text-center">
                     {log.status === 'Success' && (
-                      <span className="inline-flex items-center text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0]">
+                        <CheckCircle2 className="w-3 h-3 mr-0.5" />
                         SUCCESS
                       </span>
                     )}
                     {log.status === 'Warning' && (
-                      <span className="inline-flex items-center text-[10px] font-semibold text-red-800 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                        INFRACTION
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]">
+                        <AlertTriangle className="w-3 h-3 mr-0.5" />
+                        VIOLATION
                       </span>
                     )}
                     {log.status === 'Override' && (
-                      <span className="inline-flex items-center text-[10px] font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                        MANUAL OVERRIDE
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FFFBEB] text-[#D97706] border border-[#FDE68A]">
+                        OVERRIDE
                       </span>
                     )}
-                  </td>
-                  <td className="py-3 px-3 text-slate-600 max-w-sm">
-                    <p className="text-[11px] leading-relaxed line-clamp-2">
-                      {log.details}
-                    </p>
-                    <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
-                      Node: {log.ipAddress}
-                    </span>
                   </td>
                 </tr>
               ))}

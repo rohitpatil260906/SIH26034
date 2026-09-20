@@ -234,9 +234,16 @@ class ComplianceCheckItem(BaseModel):
 # STAGE 4: PIPELINE REQUEST / RESPONSE & BENCHMARK MODELS
 # ----------------------------------------------------
 
+class JurisdictionInfo(BaseModel):
+    country: str = "India"
+    state: str = ""
+    city: str = ""
+    pinCode: str = ""
+
 class ScanProcessRequest(BaseModel):
     images: List[Dict[str, Any]]  # [{"data": base64_str, "surface": "Front (PDP)", "file_name": "front.jpg"}]
     options: Optional[Dict[str, Any]] = None
+    jurisdiction: Optional[JurisdictionInfo] = None
 
 class ScanProcessResponse(BaseModel):
     scan_id: str
@@ -253,6 +260,7 @@ class ScanProcessResponse(BaseModel):
     measurement_validation: Optional[MeasurementValidation] = None
     labelme_annotation: Optional[LabelMeAnnotation] = None
     external_verification: str = "External verification: Not available"
+    jurisdiction: Optional[JurisdictionInfo] = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class BenchmarkEvaluationMetric(BaseModel):

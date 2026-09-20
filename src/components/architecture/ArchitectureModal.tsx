@@ -49,10 +49,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 border-b border-slate-200 pb-3">
           <button
             onClick={() => setActiveStage('stage1')}
-            className={`p-2.5 rounded-md text-left transition border ${
+            className={`p-2.5 rounded-md text-left transition border cursor-pointer ${
               activeStage === 'stage1'
-                ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-2xs'
+                : 'bg-[#FAF9F7] text-[#5F6368] border-[#E5E2DD] hover:bg-[#F5F3FF] hover:text-[#6D28D9]'
             }`}
           >
             <span className="text-[9px] uppercase font-mono block opacity-80">Stage 1</span>
@@ -62,10 +62,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
 
           <button
             onClick={() => setActiveStage('stage2')}
-            className={`p-2.5 rounded-md text-left transition border ${
+            className={`p-2.5 rounded-md text-left transition border cursor-pointer ${
               activeStage === 'stage2'
-                ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-2xs'
+                : 'bg-[#FAF9F7] text-[#5F6368] border-[#E5E2DD] hover:bg-[#F5F3FF] hover:text-[#6D28D9]'
             }`}
           >
             <span className="text-[9px] uppercase font-mono block opacity-80">Stage 2</span>
@@ -75,10 +75,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
 
           <button
             onClick={() => setActiveStage('stage3')}
-            className={`p-2.5 rounded-md text-left transition border ${
+            className={`p-2.5 rounded-md text-left transition border cursor-pointer ${
               activeStage === 'stage3'
-                ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-2xs'
+                : 'bg-[#FAF9F7] text-[#5F6368] border-[#E5E2DD] hover:bg-[#F5F3FF] hover:text-[#6D28D9]'
             }`}
           >
             <span className="text-[9px] uppercase font-mono block opacity-80">Stage 3</span>
@@ -88,10 +88,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
 
           <button
             onClick={() => setActiveStage('stage4')}
-            className={`p-2.5 rounded-md text-left transition border ${
+            className={`p-2.5 rounded-md text-left transition border cursor-pointer ${
               activeStage === 'stage4'
-                ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-2xs'
+                : 'bg-[#FAF9F7] text-[#5F6368] border-[#E5E2DD] hover:bg-[#F5F3FF] hover:text-[#6D28D9]'
             }`}
           >
             <span className="text-[9px] uppercase font-mono block opacity-80">Stage 4</span>
@@ -101,10 +101,10 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
 
           <button
             onClick={() => setActiveStage('data')}
-            className={`p-2.5 rounded-md text-left transition border ${
+            className={`p-2.5 rounded-md text-left transition border cursor-pointer ${
               activeStage === 'data'
-                ? 'bg-[#0f2942] text-white border-[#0f2942] shadow-xs'
-                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-2xs'
+                : 'bg-[#FAF9F7] text-[#5F6368] border-[#E5E2DD] hover:bg-[#F5F3FF] hover:text-[#6D28D9]'
             }`}
           >
             <span className="text-[9px] uppercase font-mono block opacity-80">Data Layer</span>

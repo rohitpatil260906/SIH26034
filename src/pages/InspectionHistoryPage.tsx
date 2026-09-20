@@ -14,7 +14,8 @@ import {
   FileText,
   RotateCcw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 import { InspectionStatus } from '../types';
 
@@ -70,15 +71,15 @@ export const InspectionHistoryPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E2DD] pb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Inspections Registry</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-[#1F2328] tracking-tight">Inspections Registry</h1>
+          <p className="text-xs text-[#5F6368] mt-0.5">
             Comprehensive archive of statutory inspections conducted under Legal Metrology Rules, 2011
           </p>
         </div>
-        <div className="text-xs font-mono text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded">
-          Total Recorded: <strong>{inspections.length}</strong> dockets
+        <div className="text-xs font-mono text-[#5F6368] bg-white border border-[#E5E2DD] px-3 py-1.5 rounded-lg shadow-2xs">
+          Total Recorded: <strong className="text-[#1F2328]">{inspections.length}</strong> dockets
         </div>
       </div>
 
@@ -88,7 +89,7 @@ export const InspectionHistoryPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {/* Search */}
             <div className="relative md:col-span-2">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#8A8F98] absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchTerm}
@@ -97,7 +98,7 @@ export const InspectionHistoryPage: React.FC = () => {
                   setCurrentPage(1);
                 }}
                 placeholder="Search by Docket ID, Product Name, Brand, or Manufacturer..."
-                className="w-full bg-slate-50 border border-slate-300 rounded pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED]"
               />
             </div>
 
@@ -109,7 +110,7 @@ export const InspectionHistoryPage: React.FC = () => {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Compliance Statuses</option>
                 <option value="Compliant">Compliant</option>
@@ -126,7 +127,7 @@ export const InspectionHistoryPage: React.FC = () => {
                   setCategoryFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Product Categories</option>
                 <option value="Edible Oils & Fats">Edible Oils & Fats</option>
@@ -140,13 +141,13 @@ export const InspectionHistoryPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
+          <div className="flex items-center justify-between pt-1 text-xs text-[#5F6368]">
             <span>
               Showing {filteredInspections.length} result(s)
             </span>
             <button
               onClick={resetFilters}
-              className="text-xs text-[#0f2942] hover:underline flex items-center space-x-1"
+              className="text-xs text-[#6D28D9] hover:underline flex items-center space-x-1 cursor-pointer font-medium"
             >
               <RotateCcw className="w-3 h-3 mr-1" />
               Reset All Filters
@@ -158,71 +159,71 @@ export const InspectionHistoryPage: React.FC = () => {
       {/* Main Table Card */}
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800 border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+          <table className="w-full text-left text-xs text-[#1F2328] border-collapse">
+            <thead className="bg-[#FAF9F7] border-b border-[#E5E2DD] text-[11px] font-bold text-[#5F6368] uppercase tracking-wider">
               <tr>
-                <th className="py-3 px-3">Docket ID</th>
-                <th className="py-3 px-3">Date</th>
-                <th className="py-3 px-3">Product Name</th>
-                <th className="py-3 px-3">Inspecting Officer</th>
-                <th className="py-3 px-3">Location / Premise</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3 text-center">Violations</th>
-                <th className="py-3 px-3 text-right">Official Report</th>
+                <th className="py-3 px-4">Docket ID</th>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Product Name</th>
+                <th className="py-3 px-4">Inspecting Officer</th>
+                <th className="py-3 px-4">Location / Premise</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-center">Violations</th>
+                <th className="py-3 px-4 text-right">Official Report</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-[#F0EDE8] bg-white">
               {paginatedInspections.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center p-8 text-slate-500 text-xs">
+                  <td colSpan={8} className="text-center p-8 text-[#8A8F98] text-xs">
                     No inspection records found matching the specified filters.
                   </td>
                 </tr>
               ) : (
                 paginatedInspections.map((insp) => (
-                  <tr key={insp.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-3 font-mono font-bold text-slate-900">
+                  <tr key={insp.id} className="hover:bg-[#FAF9F7] transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-[#1F2328]">
                       {insp.id}
                     </td>
-                    <td className="py-3 px-3 text-slate-600 font-mono">
+                    <td className="py-3.5 px-4 text-[#5F6368] font-mono">
                       {insp.date}
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="py-3.5 px-4">
                       <div>
-                        <span className="font-semibold text-slate-900 block max-w-[200px] truncate">
+                        <span className="font-semibold text-[#1F2328] block max-w-[200px] truncate">
                           {insp.productName}
                         </span>
-                        <span className="text-[10px] text-slate-400 block max-w-[180px] truncate">
+                        <span className="text-[11px] text-[#8A8F98] block max-w-[180px] truncate">
                           {insp.manufacturer}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-slate-700">
+                    <td className="py-3.5 px-4 text-[#5F6368]">
                       {insp.officerName}
                     </td>
-                    <td className="py-3 px-3 text-slate-600 max-w-[180px] truncate">
+                    <td className="py-3.5 px-4 text-[#5F6368] max-w-[180px] truncate">
                       {insp.location}
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="py-3.5 px-4">
                       <StatusBadge status={insp.status} />
                     </td>
-                    <td className="py-3 px-3 text-center font-mono font-bold">
+                    <td className="py-3.5 px-4 text-center font-mono font-bold">
                       {insp.violations.length > 0 ? (
-                        <span className="text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                        <span className="text-[#DC2626] bg-[#FEF2F2] px-2 py-0.5 rounded-md border border-[#FECACA]">
                           {insp.violations.length}
                         </span>
                       ) : (
-                        <span className="text-emerald-700">0</span>
+                        <span className="text-[#16A34A]">0</span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-right">
+                    <td className="py-3.5 px-4 text-right">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
-                        leftIcon={<FileText className="w-3.5 h-3.5 text-[#0f2942]" />}
+                        leftIcon={<FileText className="w-3.5 h-3.5 text-[#5F6368]" />}
                         onClick={() => navigate(`/reports/${insp.id}`)}
                       >
-                        Report
+                        View Report
                       </Button>
                     </td>
                   </tr>
@@ -233,24 +234,24 @@ export const InspectionHistoryPage: React.FC = () => {
         </div>
 
         {/* Pagination Controls */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-600">
+        <div className="p-3.5 border-t border-[#E5E2DD] bg-[#FAF9F7] flex items-center justify-between text-xs text-[#5F6368] rounded-b-xl">
           <span>
             Page {currentPage} of {totalPages}
           </span>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1.5">
             <button
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="p-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-lg border border-[#E5E2DD] bg-white hover:bg-[#FAF9F7] disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
               disabled={currentPage === totalPages}
-              className="p-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-lg border border-[#E5E2DD] bg-white hover:bg-[#FAF9F7] disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

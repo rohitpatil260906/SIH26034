@@ -47,8 +47,10 @@ export const App: React.FC = () => {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="scan" element={<NewInspectionPage />} />
               <Route path="new-inspection" element={<NewInspectionPage />} />
               <Route path="inspections" element={<InspectionHistoryPage />} />
+              <Route path="history" element={<InspectionHistoryPage />} />
               <Route path="reports" element={<InspectionHistoryPage />} />
               <Route path="reports/:id" element={<InspectionDetailPage />} />
               <Route path="products" element={<ProductRepositoryPage />} />

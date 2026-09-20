@@ -12,9 +12,13 @@ import {
   Shield,
   WifiOff
 } from 'lucide-react';
+import { useInspection } from '../context/InspectionContext';
+import { JurisdictionSelector } from '../components/jurisdiction/JurisdictionSelector';
+import { Jurisdiction } from '../types';
 
 export const SettingsPage: React.FC = () => {
-  const [defaultZone, setDefaultZone] = useState('Delhi NCR - Central Zone');
+  const { activeJurisdiction, setActiveJurisdiction } = useInspection();
+  const [terminalJurisdiction, setTerminalJurisdiction] = useState<Jurisdiction>(activeJurisdiction);
   const [fontTolerance, setFontTolerance] = useState('0.15 mm');
   const [autoFlagViolations, setAutoFlagViolations] = useState(true);
   const [offlineCacheEnabled, setOfflineCacheEnabled] = useState(true);
@@ -23,6 +27,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    setActiveJurisdiction(terminalJurisdiction);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
   };
@@ -37,16 +42,16 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E2DD] pb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">System & Enforcement Settings</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-[#1F2328] tracking-tight">System & Enforcement Settings</h1>
+          <p className="text-xs text-[#5F6368] mt-0.5">
             Configure jurisdictional defaults, statutory tolerances, printer templates, and local cache
           </p>
         </div>
         {isSaved && (
-          <div className="flex items-center space-x-1 text-xs text-emerald-800 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <div className="flex items-center space-x-1.5 text-xs text-[#16A34A] bg-[#F0FDF4] border border-[#BBF7D0] px-3 py-1.5 rounded-lg animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-[#16A34A]" />
             <span>Settings saved successfully</span>
           </div>
         )}
@@ -60,35 +65,23 @@ export const SettingsPage: React.FC = () => {
             subtitle="Default enforcement station mapped to current inspection terminal"
           />
           <CardContent className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Primary Zonal Controllerate
-                </label>
-                <select
-                  value={defaultZone}
-                  onChange={(e) => setDefaultZone(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
-                >
-                  <option value="Delhi NCR - Central Zone">Delhi NCR - Central Zone</option>
-                  <option value="Maharashtra - Mumbai Zone I">Maharashtra - Mumbai Zone I</option>
-                  <option value="Karnataka - Bengaluru South">Karnataka - Bengaluru South</option>
-                  <option value="Tamil Nadu - Chennai North">Tamil Nadu - Chennai North</option>
-                  <option value="West Bengal - Kolkata Central">West Bengal - Kolkata Central</option>
-                </select>
-              </div>
+            <JurisdictionSelector
+              value={terminalJurisdiction}
+              onChange={setTerminalJurisdiction}
+              layout="grid"
+              showTitle={false}
+            />
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Terminal Machine Node ID
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  value="LMCS-TERMINAL-DEL-04"
-                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-700 font-mono"
-                />
-              </div>
+            <div className="pt-3 border-t border-[#F0EDE8]">
+              <label className="block font-semibold text-[#1F2328] mb-1">
+                Terminal Machine Node ID
+              </label>
+              <input
+                type="text"
+                readOnly
+                value="LMCS-TERMINAL-MH-04"
+                className="w-full sm:w-1/2 bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#5F6368] font-mono"
+              />
             </div>
           </CardContent>
         </Card>
@@ -102,25 +95,25 @@ export const SettingsPage: React.FC = () => {
           <CardContent className="space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-[#1F2328] mb-1">
                   PDP Numeral Height Tolerance (Rule 7 & 8)
                 </label>
                 <select
                   value={fontTolerance}
                   onChange={(e) => setFontTolerance(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
+                  className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
                 >
                   <option value="0.10 mm">Strict: ± 0.10 mm</option>
                   <option value="0.15 mm">Standard Departmental: ± 0.15 mm (Recommended)</option>
                   <option value="0.25 mm">Lenient: ± 0.25 mm</option>
                 </select>
-                <span className="text-[10px] text-slate-500 mt-1 block">
+                <span className="text-[11px] text-[#8A8F98] mt-1 block">
                   Permitted variance when calibrating curved pouch or bottle labels
                 </span>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-[#1F2328] mb-1">
                   Automated Non-Compliance Tagging
                 </label>
                 <label className="flex items-center space-x-2 mt-2 cursor-pointer">
@@ -128,9 +121,9 @@ export const SettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={autoFlagViolations}
                     onChange={(e) => setAutoFlagViolations(e.target.checked)}
-                    className="rounded text-[#0f2942] focus:ring-[#0f2942] border-slate-300"
+                    className="rounded text-[#7C3AED] focus:ring-[#7C3AED] border-[#E5E2DD] cursor-pointer"
                   />
-                  <span className="text-slate-700">
+                  <span className="text-[#5F6368]">
                     Immediately flag omitted statutory phrases ("inclusive of all taxes") as High Severity
                   </span>
                 </label>
@@ -148,13 +141,13 @@ export const SettingsPage: React.FC = () => {
           <CardContent className="space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-[#1F2328] mb-1">
                   Standard Print Paper Format
                 </label>
                 <select
                   value={printerFormat}
                   onChange={(e) => setPrinterFormat(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
+                  className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
                 >
                   <option value="A4 Portrait (Official Form)">A4 Portrait (Official Legal Metrology Form)</option>
                   <option value="Legal Size (Court Docket)">Legal Size (Court Evidence Docket)</option>
@@ -162,14 +155,14 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-[#1F2328] mb-1">
                   Cryptographic Verification Seal
                 </label>
                 <input
                   type="text"
                   readOnly
                   value="Enabled (SHA-256 Hash + Verification QR)"
-                  className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-700 font-mono"
+                  className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#5F6368] font-mono"
                 />
               </div>
             </div>
@@ -188,14 +181,14 @@ export const SettingsPage: React.FC = () => {
                 type="checkbox"
                 checked={offlineCacheEnabled}
                 onChange={(e) => setOfflineCacheEnabled(e.target.checked)}
-                className="rounded text-[#0f2942] focus:ring-[#0f2942] border-slate-300"
+                className="rounded text-[#7C3AED] focus:ring-[#7C3AED] border-[#E5E2DD] cursor-pointer"
               />
-              <span className="font-semibold text-slate-900">
+              <span className="font-semibold text-[#1F2328]">
                 Enable local encrypted storage of inspections when offline
               </span>
             </label>
-            <p className="text-slate-500 text-[11px] leading-relaxed">
-              When working in field inspections without active NIC VPN connectivity, images and inspection dockets are securely cached on the browser local storage and queued for background synchronization.
+            <p className="text-[#5F6368] text-[11px] leading-relaxed">
+              When working in field inspections without active connectivity, images and inspection dockets are securely cached on the browser local storage and queued for synchronization.
             </p>
           </CardContent>
         </Card>
@@ -216,7 +209,7 @@ export const SettingsPage: React.FC = () => {
             type="submit"
             variant="primary"
             size="md"
-            leftIcon={<Save className="w-4 h-4" />}
+            leftIcon={<Save className="w-4 h-4 text-white" />}
           >
             Save Regulatory Settings
           </Button>

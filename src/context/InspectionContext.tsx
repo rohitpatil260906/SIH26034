@@ -9,7 +9,8 @@ import {
   ExtractedDeclaration,
   InspectionViolation,
   ExtractedLabelLine,
-  StructuredProductData
+  StructuredProductData,
+  Jurisdiction
 } from '../types';
 import { SAMPLE_PACKAGES, SamplePackageItem } from '../data/samplePackages';
 import { useAuth } from './AuthContext';
@@ -20,7 +21,7 @@ import {
 } from '../services/labelOcrService';
 import { analyzeLabelWithGemini, getGeminiApiKey } from '../services/geminiVisionService';
 import { evaluateLegalMetrologyRules } from '../services/ruleEngineService';
-import { processScanApi, getLabelMeJsonUrl } from '../services/backendApiService';
+import { processScanApi, getLabelMeJsonUrl, getReportsListApi, saveReportApi } from '../services/backendApiService';
 
 interface InspectionContextType {
   inspections: InspectionRecord[];
@@ -34,7 +35,9 @@ interface InspectionContextType {
   selectedSamplePackage: SamplePackageItem | null;
   ocrRawTranscript: string;
   ocrMeanConfidence: number;
+  activeJurisdiction: Jurisdiction;
 
+  setActiveJurisdiction: (jurisdiction: Jurisdiction) => void;
   setActiveStep: (step: number) => void;
   startNewInspection: (sampleId?: string, initialStep?: number) => void;
   selectSamplePackageById: (sampleId: string) => void;
@@ -90,6 +93,77 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (e) {
       console.warn('Storage purge error:', e);
     }
+  }, []);
+
+  // Fetch real inspections from SQLite backend
+  useEffect(() => {
+    let isMounted = true;
+    getReportsListApi().then((dbDockets) => {
+      if (!isMounted || !Array.isArray(dbDockets) || dbDockets.length === 0) return;
+      setInspections((prev) => {
+        const existingIds = new Set(prev.map(i => i.id));
+        const mapped: InspectionRecord[] = [];
+        for (const item of dbDockets) {
+          const docketId = item.id || item.scan_id;
+          if (!docketId || existingIds.has(docketId)) continue;
+          const d = item.docket || {};
+          const pInfo = d.product_info || {};
+          mapped.push({
+            id: docketId,
+            scanId: docketId,
+            date: item.created_at ? item.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+            inspectionType: 'Routine Audit' as const,
+            productName: item.product_name || pInfo.product_name || 'Packaged Commodity',
+            brand: item.brand || pInfo.brand || '',
+            category: pInfo.commodity_name || 'Packaged Commodity',
+            manufacturer: item.manufacturer || pInfo.manufacturer?.full_address || '',
+            packerImporter: '',
+            barcode: '',
+            batchNumber: pInfo.batch_number || '',
+            status: item.status || (item.overall_status === 'COMPLIANT' ? 'Compliant' : 'Non-Compliant'),
+            officerName: 'Rohit Patil',
+            officerBadge: 'MH-LM-8492',
+            jurisdiction: 'Maharashtra, Nashik, India, PIN: 422001',
+            location: 'Nashik, Maharashtra',
+            images: [],
+            declarations: d.canonical_fields?.map((cf: any, idx: number) => ({
+              id: `DEC-DB-${cf.field_name}-${idx}`,
+              declarationType: cf.statutory_name || cf.field_name,
+              extractedValue: cf.extracted_value,
+              expectedRequirement: `Statutory declaration under ${cf.rule_reference}`,
+              ruleReference: cf.rule_reference,
+              surface: (cf.detected_on_surface || 'Front (PDP)') as SurfaceType,
+              status: cf.status === 'Found' ? 'Found' : (cf.status === 'Defective' ? 'Defective' : 'Missing'),
+              confidence: cf.confidence > 0.85 ? 'High' : 'Medium',
+              confidenceScore: cf.confidence,
+              officerStatus: 'Verified',
+              boundingBox: cf.bbox
+            })) || [],
+            violations: d.compliance_checks?.filter((c: any) => c.status === 'FAIL').map((c: any, idx: number) => ({
+              id: `VIO-DB-${c.rule_no}-${idx}`,
+              violationType: c.rule_title,
+              ruleReference: `${c.rule_no} (${c.sub_rule})`,
+              statutoryActClause: c.section_penalty || 'Section 36(1)',
+              product: item.product_name,
+              surface: (c.surface || 'Front (PDP)') as SurfaceType,
+              description: c.detected_declaration,
+              severity: 'High' as const,
+              officerStatus: 'Needs Review' as const,
+              evidenceImage: '',
+              recommendedPenalty: c.section_penalty || 'Compounding fee: ₹25,000.',
+              reportedDate: item.created_at ? item.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
+            })) || [],
+            officerNotes: item.officer_notes || '',
+            finalDecision: item.final_decision || 'Draft',
+            complianceScore: item.compliance_score || 100,
+            qrVerificationHash: `LM-VERIF-${docketId}`,
+            statutoryReference: 'Verification under Legal Metrology (Packaged Commodities) Rules, 2011'
+          });
+        }
+        return mapped.length > 0 ? [...mapped, ...prev] : prev;
+      });
+    }).catch(err => console.warn('Failed to fetch dockets from server:', err));
+    return () => { isMounted = false; };
   }, []);
 
   const [inspections, setInspections] = useState<InspectionRecord[]>(() => {
@@ -174,6 +248,25 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [ocrRawTranscript, setOcrRawTranscript] = useState<string>('');
   const [ocrMeanConfidence, setOcrMeanConfidence] = useState<number>(96);
 
+  const [activeJurisdiction, setActiveJurisdictionState] = useState<Jurisdiction>(() => {
+    try {
+      const saved = localStorage.getItem('lmcs_active_jurisdiction');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return { country: 'India', state: '', city: '', pinCode: '' };
+  });
+
+  const setActiveJurisdiction = (newJ: Jurisdiction) => {
+    setActiveJurisdictionState(newJ);
+    try {
+      localStorage.setItem('lmcs_active_jurisdiction', JSON.stringify(newJ));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Safe localStorage synchronization with QuotaExceededError protection
   useEffect(() => {
     try {
@@ -248,12 +341,29 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setSelectedSamplePackage(baseSample);
 
+    const initialJurisdiction: Jurisdiction = activeJurisdiction?.state
+      ? { ...activeJurisdiction }
+      : {
+          country: 'India',
+          state: '',
+          city: '',
+          pinCode: ''
+        };
+
+    const formattedJurisdiction = [
+      initialJurisdiction.city,
+      initialJurisdiction.state,
+      initialJurisdiction.country,
+      initialJurisdiction.pinCode ? `PIN: ${initialJurisdiction.pinCode}` : ''
+    ].filter(Boolean).join(', ') || 'India';
+
     const initialRecord: InspectionRecord = {
       id: generatedId,
       date: today,
       officerName: currentUser?.name || 'Enforcement Officer',
       officerBadge: currentUser?.badgeNumber || 'LM-DEL-2018-0442',
-      jurisdiction: currentUser?.jurisdictionZone || 'Delhi NCR - Central',
+      jurisdiction: formattedJurisdiction,
+      jurisdictionDetails: initialJurisdiction,
       location: '',
       inspectionType: 'Market Surveillance',
       productName: baseSample ? baseSample.name : '',
@@ -325,7 +435,24 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateInspectionDetails = (details: Partial<InspectionRecord>) => {
     if (!currentInspection) return;
-    setCurrentInspection(prev => (prev ? { ...prev, ...details } : null));
+    setCurrentInspection(prev => {
+      if (!prev) return null;
+      let nextJurisdiction = details.jurisdiction ?? prev.jurisdiction;
+      if (details.jurisdictionDetails) {
+        const jd = details.jurisdictionDetails;
+        nextJurisdiction = [
+          jd.city,
+          jd.state,
+          jd.country,
+          jd.pinCode ? `PIN: ${jd.pinCode}` : ''
+        ].filter(Boolean).join(', ') || 'India';
+      }
+      return {
+        ...prev,
+        ...details,
+        jurisdiction: nextJurisdiction
+      };
+    });
   };
 
   const addImageToInspection = (surface: SurfaceType, name: string, url: string) => {
@@ -402,8 +529,17 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           file_name: img.name
         }));
 
+        const jurisdictionPayload = currentInspection?.jurisdictionDetails || {
+          country: 'India',
+          state: currentInspection?.jurisdiction || '',
+          city: '',
+          pinCode: ''
+        };
+
         try {
-          const backendResponse = await processScanApi(imagesPayload);
+          const backendResponse = await processScanApi(imagesPayload, {
+            jurisdiction: jurisdictionPayload
+          });
 
           if (backendResponse && backendResponse.compliance_checks && backendResponse.compliance_checks.length > 0) {
             setAnalysisProgress(75);
@@ -1265,6 +1401,11 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       `Officer finalized inspection with decision: ${decision}. Overall compliance: ${finalizedRecord.status}.`
     );
 
+    // Persist finalized report to SQLite backend database
+    saveReportApi(finalizedRecord).catch(err => {
+      console.warn('Backend report persistence note:', err);
+    });
+
     setCurrentInspection(finalizedRecord);
     return finalizedRecord;
   };
@@ -1295,7 +1436,9 @@ export const InspectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         selectedSamplePackage,
         ocrRawTranscript,
         ocrMeanConfidence,
+        activeJurisdiction,
 
+        setActiveJurisdiction,
         setActiveStep,
         startNewInspection,
         selectSamplePackageById,

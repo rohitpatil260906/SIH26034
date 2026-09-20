@@ -29,7 +29,10 @@ def get_easyocr_reader():
         return EASYOCR_READER
     try:
         import easyocr
-        EASYOCR_READER = easyocr.Reader(['en', 'hi'], gpu=False, verbose=False)
+        try:
+            EASYOCR_READER = easyocr.Reader(['hi'], download_enabled=False, gpu=False, verbose=False)
+        except Exception:
+            EASYOCR_READER = None
         EASYOCR_INITIALIZED = True
     except Exception:
         EASYOCR_READER = None

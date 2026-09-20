@@ -1,24 +1,71 @@
 import React, { useState, useMemo } from 'react';
 import { useInspection } from '../context/InspectionContext';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '../components/ui/Card';
+import { Card, CardHeader, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/Badge';
 import {
-  Search,
   Package,
-  PlusCircle,
+  Search,
+  Filter,
+  Eye,
+  Plus,
+  ArrowRight,
   ExternalLink,
+  RotateCcw,
   Camera
 } from 'lucide-react';
+import { InspectionStatus } from '../types';
 
 export const ProductRepositoryPage: React.FC = () => {
-  const { products, startNewInspection, updateInspectionDetails } = useInspection();
+  const { inspections, startNewInspection, updateInspectionDetails } = useInspection();
   const navigate = useNavigate();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Derive unique product catalogue from inspections
+  const products = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      name: string;
+      barcode: string;
+      brand: string;
+      category: string;
+      manufacturer: string;
+      standardQuantity: string;
+      lastInspectionDate: string;
+      complianceStatus: InspectionStatus;
+      totalViolations: number;
+      lastInspectionId?: string;
+    }>();
+
+    inspections.forEach(insp => {
+      const key = insp.barcode || insp.productName;
+      const existing = map.get(key);
+
+      if (!existing) {
+        map.set(key, {
+          id: insp.id,
+          name: insp.productName,
+          barcode: insp.barcode,
+          brand: insp.brand,
+          category: insp.category,
+          manufacturer: insp.manufacturer,
+          standardQuantity: (insp as any).standardQuantity || insp.structuredData?.net_quantity || '',
+          lastInspectionDate: insp.date,
+          complianceStatus: insp.status,
+          totalViolations: insp.violations.length,
+          lastInspectionId: insp.id
+        });
+      } else {
+        existing.totalViolations += insp.violations.length;
+      }
+    });
+
+    return Array.from(map.values());
+  }, [inspections]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -27,7 +74,7 @@ export const ProductRepositoryPage: React.FC = () => {
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.barcode.includes(searchTerm);
+        p.barcode.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
       const matchesStatus = statusFilter === 'ALL' || p.complianceStatus === statusFilter;
@@ -36,33 +83,34 @@ export const ProductRepositoryPage: React.FC = () => {
     });
   }, [products, searchTerm, categoryFilter, statusFilter]);
 
-  const handleInspectAgain = (productName: string, barcode?: string, brand?: string, category?: string, manufacturer?: string) => {
+  const handleStartNew = () => {
     startNewInspection();
-    updateInspectionDetails({
-      productName,
-      barcode: barcode || '',
-      brand: brand || '',
-      category: category || 'General Packaged Commodity',
-      manufacturer: manufacturer || ''
-    });
     navigate('/new-inspection?step=2');
   };
 
-  const handleStartNew = () => {
-    startNewInspection();
+  const handleInspectAgain = (productName: string, barcode: string, brand: string, category: string, manufacturer: string) => {
+    startNewInspection(undefined, 2);
+    updateInspectionDetails({
+      productName,
+      barcode,
+      brand,
+      category,
+      manufacturer
+    });
     navigate('/new-inspection?step=2&camera=open');
   };
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E2DD] pb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Packaged Commodity Repository</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Central registry of audited packaged goods, manufacturer compliance history, and market surveillance records
+          <h1 className="text-2xl font-bold text-[#1F2328] tracking-tight">Product Repository</h1>
+          <p className="text-xs text-[#5F6368] mt-0.5">
+            Central catalog of packaged commodities audited for Legal Metrology compliance
           </p>
         </div>
+
         <div className="flex items-center space-x-2">
           <Button
             variant="primary"
@@ -70,11 +118,11 @@ export const ProductRepositoryPage: React.FC = () => {
             onClick={handleStartNew}
             className="flex items-center space-x-1.5"
           >
-            <Camera className="w-4 h-4" />
+            <Camera className="w-4 h-4 text-white" />
             <span>Scan New Commodity</span>
           </Button>
-          <div className="text-xs font-mono text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded">
-            Registered Products: <strong>{products.length}</strong>
+          <div className="text-xs font-mono text-[#5F6368] bg-white border border-[#E5E2DD] px-3 py-1.5 rounded-lg shadow-2xs">
+            Registered: <strong className="text-[#1F2328]">{products.length}</strong>
           </div>
         </div>
       </div>
@@ -84,13 +132,13 @@ export const ProductRepositoryPage: React.FC = () => {
         <CardContent className="p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="relative md:col-span-2">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#8A8F98] absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by Product Name, Brand, Manufacturer, or GTIN..."
-                className="w-full bg-slate-50 border border-slate-300 rounded pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED]"
               />
             </div>
 
@@ -98,7 +146,7 @@ export const ProductRepositoryPage: React.FC = () => {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Categories</option>
                 <option value="Edible Oils & Fats">Edible Oils & Fats</option>
@@ -115,7 +163,7 @@ export const ProductRepositoryPage: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
+                className="w-full bg-[#FAF9F7] border border-[#E5E2DD] rounded-lg px-3 py-1.5 text-xs text-[#1F2328] focus:bg-white focus:outline-none focus:border-[#7C3AED] cursor-pointer"
               >
                 <option value="ALL">All Compliance Ratings</option>
                 <option value="Compliant">Compliant</option>
@@ -131,13 +179,13 @@ export const ProductRepositoryPage: React.FC = () => {
       <Card>
         {filteredProducts.length === 0 ? (
           <div className="py-12 px-4 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+            <div className="w-12 h-12 rounded-full bg-[#FAF9F7] border border-[#E5E2DD] flex items-center justify-center mx-auto text-[#8A8F98]">
               <Package className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-bold text-slate-800">
+            <h3 className="text-sm font-bold text-[#1F2328]">
               {products.length === 0 ? 'No Commodities Registered Yet' : 'No Matching Commodities Found'}
             </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
+            <p className="text-xs text-[#5F6368] max-w-md mx-auto">
               {products.length === 0
                 ? 'Commodities audited under Legal Metrology compliance inspections will automatically be registered in this central repository.'
                 : 'Try adjusting your search terms or filters to find the registered commodity.'}
@@ -150,8 +198,8 @@ export const ProductRepositoryPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-800 border-collapse">
-              <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+            <table className="w-full text-left text-xs text-[#1F2328] border-collapse">
+              <thead className="bg-[#FAF9F7] border-b border-[#E5E2DD] text-[11px] font-bold text-[#5F6368] uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Product Particulars</th>
                   <th className="py-3 px-4">Manufacturer / Packer</th>
@@ -163,29 +211,29 @@ export const ProductRepositoryPage: React.FC = () => {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y divide-[#F0EDE8] bg-white">
                 {filteredProducts.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={prod.id} className="hover:bg-[#FAF9F7] transition-colors">
                     <td className="py-3 px-4">
                       <div>
-                        <span className="font-semibold text-slate-900 block max-w-[220px]">
+                        <span className="font-semibold text-[#1F2328] block max-w-[220px]">
                           {prod.name}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono block">
+                        <span className="text-[10px] text-[#8A8F98] font-mono block">
                           GTIN: {prod.barcode || 'N/A'}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-slate-700 max-w-[180px] truncate">
+                    <td className="py-3 px-4 text-[#5F6368] max-w-[180px] truncate">
                       {prod.manufacturer || 'Unspecified'}
                     </td>
-                    <td className="py-3 px-4 text-slate-600">
+                    <td className="py-3 px-4 text-[#5F6368]">
                       {prod.category}
                     </td>
-                    <td className="py-3 px-4 font-mono text-slate-700">
+                    <td className="py-3 px-4 font-mono text-[#5F6368]">
                       {prod.standardQuantity || '—'}
                     </td>
-                    <td className="py-3 px-4 text-slate-600 font-mono">
+                    <td className="py-3 px-4 text-[#5F6368] font-mono">
                       {prod.lastInspectionDate}
                     </td>
                     <td className="py-3 px-4">
@@ -193,11 +241,11 @@ export const ProductRepositoryPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-center font-mono font-bold">
                       {prod.totalViolations > 0 ? (
-                        <span className="text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                        <span className="text-[#DC2626] bg-[#FEF2F2] px-2 py-0.5 rounded-md border border-[#FECACA]">
                           {prod.totalViolations}
                         </span>
                       ) : (
-                        <span className="text-emerald-700">0</span>
+                        <span className="text-[#16A34A]">0</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">

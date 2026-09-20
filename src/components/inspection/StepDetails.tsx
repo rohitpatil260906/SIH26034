@@ -1,19 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useInspection } from '../../context/InspectionContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { ArrowRight, Sparkles, Building2, User, Calendar, MapPin, Tag } from 'lucide-react';
+import { ArrowRight, Sparkles, Building2, User, Calendar, MapPin, Tag, AlertCircle } from 'lucide-react';
 import { InspectionType } from '../../types';
+import { JurisdictionSelector } from '../jurisdiction/JurisdictionSelector';
 
 export const StepDetails: React.FC = () => {
   const { currentInspection, updateInspectionDetails, setActiveStep } = useInspection();
   const { currentUser } = useAuth();
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [isJurisdictionValid, setIsJurisdictionValid] = useState(false);
+  const [jurisdictionError, setJurisdictionError] = useState<string | undefined>(undefined);
 
   if (!currentInspection) return null;
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
+    setHasAttemptedSubmit(true);
+
+    const jd = currentInspection.jurisdictionDetails;
+    if (!jd?.state || !jd?.city || !jd?.pinCode || !isJurisdictionValid) {
+      return;
+    }
+
     setActiveStep(2); // Proceed to Capture
   };
 
@@ -104,6 +115,45 @@ export const StepDetails: React.FC = () => {
               />
             </div>
           </div>
+
+          {/* Statutory Territorial Jurisdiction (Cascading: Country -> State -> City/District -> PIN) */}
+          <div className="pt-4 border-t border-slate-200">
+            <JurisdictionSelector
+              value={currentInspection.jurisdictionDetails || {
+                country: 'India',
+                state: '',
+                city: '',
+                pinCode: ''
+              }}
+              onChange={(newJ) => {
+                updateInspectionDetails({
+                  jurisdictionDetails: newJ
+                });
+              }}
+              onValidationChange={(valid, err) => {
+                setIsJurisdictionValid(valid);
+                setJurisdictionError(err);
+              }}
+              showErrors={hasAttemptedSubmit}
+              layout="grid"
+              title="Statutory Jurisdiction"
+              subtitle="Enforcing State / UT, District Controllerate, and Station PIN code under Legal Metrology Rules, 2011"
+            />
+          </div>
+
+          {hasAttemptedSubmit && (!isJurisdictionValid || !currentInspection.jurisdictionDetails?.state || !currentInspection.jurisdictionDetails?.city) && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-800 flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span className="font-medium">
+                {jurisdictionError ||
+                  (!currentInspection.jurisdictionDetails?.state
+                    ? 'Please select a State/Union Territory.'
+                    : !currentInspection.jurisdictionDetails?.city
+                    ? 'Please select a City/District.'
+                    : 'PIN Code must contain exactly 6 digits.')}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

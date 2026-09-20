@@ -284,3 +284,70 @@ export function getDocxReportUrl(scanId: string): string {
 export function getLabelMeJsonUrl(scanId: string): string {
   return `/api/scan/${encodeURIComponent(scanId)}/labelme`;
 }
+
+export async function getScansListApi(limit: number = 50, offset: number = 0): Promise<any[]> {
+  try {
+    const res = await fetch(`/api/scans?limit=${limit}&offset=${offset}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (err) {
+    console.warn('Get scans list error:', err);
+    return [];
+  }
+}
+
+export async function getReportsListApi(limit: number = 50, offset: number = 0): Promise<any[]> {
+  try {
+    const res = await fetch(`/api/reports?limit=${limit}&offset=${offset}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (err) {
+    console.warn('Get reports list error:', err);
+    return [];
+  }
+}
+
+export async function saveReportApi(docketData: any): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const res = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(docketData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Failed to save report to server');
+    }
+    return await res.json();
+  } catch (err: any) {
+    console.warn('Save report API error:', err);
+    return { success: false, message: err.message };
+  }
+}
+
+export async function deleteReportApi(scanId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/reports/${encodeURIComponent(scanId)}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Delete report API error:', err);
+    return false;
+  }
+}
+
+export async function getDashboardStatsApi(): Promise<any | null> {
+  try {
+    const res = await fetch('/api/dashboard/stats');
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.warn('Get dashboard stats API error:', err);
+    return null;
+  }
+}
+
