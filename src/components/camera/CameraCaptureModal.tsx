@@ -49,6 +49,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   // Persistent reference to stream for leak-free track cleanup across renders and closures
   const streamRef = useRef<MediaStream | null>(null);
+  const activeRequestIdRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +121,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   // Guaranteed clean camera track shutdown
   const stopCamera = useCallback(() => {
+    activeRequestIdRef.current++;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         try {
@@ -130,17 +132,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       });
       streamRef.current = null;
     }
-    if (stream) {
-      stream.getTracks().forEach(track => {
-        try {
-          track.stop();
-        } catch (e) {
-          console.warn('[CameraCaptureModal] Error stopping stream track:', e);
-        }
-      });
-    }
-    (window as any).__activeCameraStream = null;
-    (window as any).__cameraInitialError = null;
     setStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -150,41 +141,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       countdownTimerRef.current = null;
     }
     setCountdown(null);
-  }, [stream]);
+  }, []);
 
-  // Start device camera via navigator.mediaDevices.getUserMedia({ video: true })
+  // Start device camera via navigator.mediaDevices.getUserMedia({ video: true, audio: false })
   const startCamera = useCallback(async (deviceId?: string) => {
+    const currentRequestId = ++activeRequestIdRef.current;
     setIsLoadingCamera(true);
     setCameraError(null);
     setErrorTitle(null);
     setIsPermissionDenied(false);
-
-    // 1. Check if camera stream was already requested by the button click
-    const preStream = (window as any).__activeCameraStream as MediaStream | undefined;
-    if (preStream && preStream.active) {
-      (window as any).__activeCameraStream = null;
-      streamRef.current = preStream;
-      setStream(preStream);
-      setIsLoadingCamera(false);
-      setCameraError(null);
-      setErrorTitle(null);
-      setIsPermissionDenied(false);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = preStream;
-        videoRef.current.muted = true;
-        videoRef.current.playsInline = true;
-        videoRef.current.play().catch(playErr => {
-          console.warn('[CameraCaptureModal] Video play error with pre-stream:', playErr);
-        });
-      }
-      refreshDevices();
-      return;
-    }
-
-    // 2. Check if an error occurred during button click trigger
-    let caughtError: any = (window as any).__cameraInitialError || null;
-    (window as any).__cameraInitialError = null;
 
     // Stop any existing stream before opening a new one
     if (streamRef.current) {
@@ -199,22 +164,6 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       videoRef.current.srcObject = null;
     }
 
-    // Verify valid browser context (localhost or HTTPS)
-    const isSecureContext =
-      window.isSecureContext ||
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname === '::1';
-
-    if (!isSecureContext) {
-      setIsLoadingCamera(false);
-      setErrorTitle('Secure Context Required');
-      setCameraError(
-        'Camera access is restricted to secure origins (HTTPS or localhost). Please access the application via http://localhost:5174 or HTTPS.'
-      );
-      return;
-    }
-
     // Check whether navigator.mediaDevices and getUserMedia are available
     if (!navigator?.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setIsLoadingCamera(false);
@@ -225,37 +174,37 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       return;
     }
 
-    let acquiredStream: MediaStream | null = null;
-
-    // Request camera using browser's real camera API
-    if (!caughtError) {
-      try {
-        if (deviceId && deviceId.trim()) {
-          try {
-            acquiredStream = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: { exact: deviceId } },
-              audio: false
-            });
-          } catch {
-            acquiredStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false
-            });
-          }
-        } else {
+    try {
+      let acquiredStream: MediaStream | null = null;
+      if (deviceId && deviceId.trim()) {
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: deviceId } },
+            audio: false
+          });
+        } catch {
           acquiredStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false
           });
         }
-      } catch (err: any) {
-        console.error('[CameraCaptureModal] getUserMedia failed with error:', err?.name, err?.message, err);
-        caughtError = err;
+      } else {
+        acquiredStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
       }
-    }
 
-    // Attach stream if permission granted and camera stream acquired
-    if (acquiredStream) {
+      // If a newer request was started or modal was closed while waiting for permission
+      if (activeRequestIdRef.current !== currentRequestId) {
+        acquiredStream.getTracks().forEach(t => {
+          try {
+            t.stop();
+          } catch {}
+        });
+        return;
+      }
+
       streamRef.current = acquiredStream;
       setStream(acquiredStream);
       setIsLoadingCamera(false);
@@ -273,12 +222,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       }
 
       refreshDevices();
-    } else if (caughtError) {
+    } catch (err: any) {
+      if (activeRequestIdRef.current !== currentRequestId) return;
       setIsLoadingCamera(false);
-      const errName = caughtError.name || '';
-      const errMsg = caughtError.message || '';
+      console.error('[CameraCaptureModal] getUserMedia failed with error:', err?.name, err?.message, err);
 
-      // Differentiate errors according to actual cause
+      const errName = err?.name || '';
+      const errMsg = err?.message || '';
+
+      // Differentiate genuine errors according to actual cause
       if (
         errName === 'NotAllowedError' ||
         errName === 'PermissionDeniedError' ||
@@ -504,7 +456,10 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={() => {
+              stopCamera();
+              onClose();
+            }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
             title="Close Camera"
           >

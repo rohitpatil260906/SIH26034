@@ -352,18 +352,7 @@ export const StepCapture: React.FC = () => {
                 type="button"
                 variant="primary"
                 size="md"
-                onClick={async () => {
-                  try {
-                    if (navigator?.mediaDevices?.getUserMedia) {
-                      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                      (window as any).__activeCameraStream = stream;
-                    }
-                  } catch (err: any) {
-                    console.warn('[StepCapture] Camera request on button click:', err);
-                    (window as any).__cameraInitialError = err;
-                  }
-                  setIsCameraModalOpen(true);
-                }}
+                onClick={() => setIsCameraModalOpen(true)}
                 className="w-full flex items-center justify-center space-x-2"
               >
                 <Camera className="w-4 h-4 text-white" />

@@ -144,17 +144,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenArchitecture }) => {
       label: 'Camera Scan',
       description: 'Live continuous barcode & text capture',
       icon: Sparkles,
-      onClick: async () => {
+      onClick: () => {
         if (!currentInspection) startNewInspection(undefined, 2);
-        try {
-          if (navigator?.mediaDevices?.getUserMedia) {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            (window as any).__activeCameraStream = stream;
-          }
-        } catch (err: any) {
-          console.warn('[Header] Camera request on scan click:', err);
-          (window as any).__cameraInitialError = err;
-        }
         navigate('/new-inspection?step=2&camera=open');
       }
     }
