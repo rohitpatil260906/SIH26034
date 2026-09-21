@@ -31,7 +31,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user'); // Default to 'user' for laptop webcam compatibility
+  const isMobileDevice = typeof window !== 'undefined' && (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
+  );
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>(() => isMobileDevice ? 'environment' : 'user');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [errorTitle, setErrorTitle] = useState<string | null>(null);
   const [exactErrorDetails, setExactErrorDetails] = useState<string | null>(null);
@@ -169,8 +173,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   }, []);
 
   // Start device camera via navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-  const startCamera = useCallback(async (deviceId?: string) => {
+  const startCamera = useCallback(async (deviceId?: string, targetFacingMode?: 'environment' | 'user') => {
     const currentRequestId = ++activeRequestIdRef.current;
+    const effectiveFacingMode = targetFacingMode || facingMode;
     setIsLoadingCamera(true);
     setCameraError(null);
     setErrorTitle(null);
@@ -240,7 +245,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         // 2. Standard native browser camera request with ideal facing mode
         try {
           acquiredStream = await navigator.mediaDevices.getUserMedia({
-            video: facingMode ? { facingMode: { ideal: facingMode } } : true,
+            video: effectiveFacingMode ? { facingMode: { ideal: effectiveFacingMode } } : true,
             audio: false
           });
         } catch (facingErr) {
@@ -517,30 +522,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   };
 
-  const handleSwitchLens = async () => {
+  const handleSwitchLens = () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
-    try {
-      if (navigator?.mediaDevices?.getUserMedia) {
-        const switchedStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: nextMode } },
-          audio: false
-        });
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(t => t.stop());
-        }
-        streamRef.current = switchedStream;
-        setStream(switchedStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = switchedStream;
-          videoRef.current.muted = true;
-          videoRef.current.playsInline = true;
-          videoRef.current.play().catch(() => {});
-        }
-      }
-    } catch {
-      startCamera();
-    }
+    setSelectedDeviceId('');
+    stopCamera();
+    startCamera(undefined, nextMode);
   };
 
   if (!isOpen) return null;
@@ -815,9 +802,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         </div>
 
         {/* Action Controls Footer */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 bg-slate-900 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Left Action: Upload File Alternative */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-center sm:justify-start space-x-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -828,7 +815,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <Button
               variant="outline"
               size="sm"
-              className="text-slate-300 border-slate-700 hover:bg-slate-800"
+              className="text-slate-300 border-slate-700 hover:bg-slate-800 w-full sm:w-auto"
               leftIcon={<Upload className="w-3.5 h-3.5" />}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -837,13 +824,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </div>
 
           {/* Right Action: Shoot Photo or Review Confirm */}
-          <div className="flex items-center space-x-2.5">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center sm:justify-end gap-2 sm:space-x-2.5">
             {capturedImage ? (
               <>
                 <Button
                   variant="outline"
                   size="md"
-                  className="text-slate-200 border-slate-700 hover:bg-slate-800 font-semibold"
+                  className="text-slate-200 border-slate-700 hover:bg-slate-800 font-semibold flex-1 sm:flex-initial"
                   leftIcon={<RefreshCw className="w-4 h-4" />}
                   onClick={handleRetake}
                 >
@@ -852,7 +839,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 <Button
                   variant="success"
                   size="md"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 shadow-lg border-emerald-500"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 shadow-lg border-emerald-500 flex-1 sm:flex-initial"
                   leftIcon={<Check className="w-4 h-4" />}
                   onClick={handleConfirmPhoto}
                 >
@@ -864,7 +851,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 type="button"
                 onClick={handleShootPhoto}
                 disabled={isLoadingCamera}
-                className={`flex items-center space-x-2.5 px-6 py-2.5 rounded-lg font-bold text-sm text-white shadow-xl transition-all transform active:scale-95 cursor-pointer border ${
+                className={`w-full sm:w-auto justify-center flex items-center space-x-2.5 px-6 py-2.5 rounded-lg font-bold text-sm text-white shadow-xl transition-all transform active:scale-95 cursor-pointer border ${
                   isLoadingCamera
                     ? 'bg-slate-700 border-slate-600 opacity-50 cursor-not-allowed'
                     : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-400/50 hover:shadow-emerald-500/25 ring-2 ring-emerald-500/30'

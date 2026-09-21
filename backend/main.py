@@ -20,11 +20,14 @@ from .models import (
     MeasurementValidation,
     BenchmarkEvaluationResponse,
     SystemDiagnosticStatus,
-<<<<<<< HEAD
+    AddressInfo,
+    NetQuantityInfo,
+    MrpInfo,
+    DateInfo,
+    ConsumerCareInfo,
     JurisdictionInfo,
     UnitSalePriceInfo,
-    CanonicalField
-=======
+    CanonicalField,
     LmCompassResult,
     UniversalFieldObject,
     Stage1Response,
@@ -32,7 +35,6 @@ from .models import (
     Stage3Response,
     Stage4Response,
     Stage5Response
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
 )
 from .services.stage1_cv import Stage1Pipeline
 from .services.stage2_ocr import Stage2Pipeline
@@ -57,13 +59,9 @@ from .services.ocr_engine import (
     TESSERACT_AVAILABLE,
     get_easyocr_reader
 )
-<<<<<<< HEAD
-from .services.text_processor import process_and_classify_text
+from .services.text_processor import process_and_classify_text, build_lm_compass_dossier
 from .services.llm_extractor import get_ai_provider
 from .services.ml_service import ml_service
-=======
-from .services.text_processor import process_and_classify_text, build_lm_compass_dossier
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
 from .services.rule_engine import (
     evaluate_legal_metrology_rules,
     load_statutory_rules_library
@@ -582,12 +580,9 @@ def process_scan(request: ScanProcessRequest):
         measurement_validation=measurement_val,
         labelme_annotation=labelme_ann,
         external_verification=ext_verif,
-<<<<<<< HEAD
         jurisdiction=req_jurisdiction,
-=======
         lm_compass_result=lm_compass,
-        universal_fields=product_data.universal_fields,
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
+        universal_fields=product_data.universal_fields if hasattr(product_data, 'universal_fields') else [],
         timestamp=datetime.utcnow().isoformat()
     )
 
@@ -654,17 +649,6 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         
     # Generate on-the-fly standard packaging docket for historical/sample IDs
     prod_data = StructuredProductData(
-<<<<<<< HEAD
-        product_name="Lakmé Sun Expert Aqua Sun Gel SPF 50",
-        commodity_name="Sunscreen Gel (Cosmetic)",
-        manufacturer={"name": "Aero Care Personal Products LLP", "full_address": "Survey 284/2, Naroli, D&NH - 396235", "pin_code": "396235"},
-        net_quantity={"value": 50.0, "unit": "g", "raw_text": "Net Qty: 50 g"},
-        mrp={"amount": 499.0, "raw_text": "₹ 499.00 (inclusive of all taxes)"},
-        unit_sale_price=UnitSalePriceInfo(raw_text="₹ 9.98 / g", value_per_unit="₹ 9.98 / g", is_exempt=False),
-        dates={"mfd": "02/2026", "expiry": "01/2028"},
-        batch_number="B-LK2026",
-        consumer_care={"phone": "1800-10-22-221", "email": "lever.care@unilever.com"}
-=======
         product_name="Standard Pre-Packaged Commodity",
         commodity_name="Packaged Retail Commodity",
         manufacturer=AddressInfo(name="Registered Commodity Packer Ltd", full_address="Plot 12, Phase 1, Industrial Area, Gurugram, Haryana - 122001", pin_code="122001", has_valid_pin=True),
@@ -676,24 +660,16 @@ def get_or_create_scan_docket(scan_id: str) -> ScanProcessResponse:
         batch="B-202601",
         country_of_origin="India",
         consumer_care=ConsumerCareInfo(phone="1800-11-4422", email="care@consumer-helpline.gov.in")
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
     )
     checks, score, overall = evaluate_legal_metrology_rules(prod_data, "Front (PDP)", False)
     scan_resp = ScanProcessResponse(
         scan_id=scan_id,
         product_info=prod_data,
         canonical_fields=[
-<<<<<<< HEAD
-            CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.product_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
-            CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="50 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
-            CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 499.00 (incl. of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
-            CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value="Survey 284/2, Naroli, D&NH - 396235", confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
-=======
             CanonicalField(field_name="product_name", statutory_name="Generic Name", extracted_value=prod_data.commodity_name, confidence=0.99, status="Found", rule_reference="Rule 6(1)(b)"),
             CanonicalField(field_name="net_quantity", statutory_name="Net Quantity", extracted_value="500 g", confidence=0.99, status="Found", rule_reference="Rule 6(1)(c) & Rule 13"),
             CanonicalField(field_name="mrp", statutory_name="Retail Sale Price (MRP)", extracted_value="₹ 250.00 (inclusive of all taxes)", confidence=0.99, status="Found", rule_reference="Rule 6(1)(e)"),
             CanonicalField(field_name="manufacturer", statutory_name="Manufacturer Address", extracted_value=prod_data.manufacturer.full_address, confidence=0.98, status="Found", rule_reference="Rule 6(1)(a) & Rule 10")
->>>>>>> 3248f0a74d5b1b9f0ebe7d93496f7aaaa78794e8
         ],
         compliance_checks=checks,
         compliance_score=score,
@@ -939,7 +915,8 @@ from .models import (
     Stage10ScanStatusResponse,
     Stage10FinalResult
 )
-from .pipeline import Stage10PipelineOrchestrator, EvidenceHighlighter
+from .pipeline import Stage10PipelineOrchestrator
+from .violations import EvidenceHighlighter
 
 stage10_orchestrator = Stage10PipelineOrchestrator()
 
