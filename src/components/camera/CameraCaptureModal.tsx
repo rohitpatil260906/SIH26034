@@ -109,18 +109,21 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   // Enumerate camera devices
   const refreshDevices = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     try {
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
       setVideoDevices(videoInputs);
-      if (videoInputs.length > 0 && !selectedDeviceId && videoInputs[0].deviceId) {
-        setSelectedDeviceId(videoInputs[0].deviceId);
-      }
+      setSelectedDeviceId(prev => {
+        if (!prev && videoInputs.length > 0 && videoInputs[0].deviceId) {
+          return videoInputs[0].deviceId;
+        }
+        return prev;
+      });
     } catch (e) {
       console.warn('[CameraCaptureModal] Could not enumerate video devices:', e);
     }
-  }, [selectedDeviceId]);
+  }, []);
 
   // Callback ref to attach stream to video element whenever it mounts
   const attachVideoRef = useCallback((node: HTMLVideoElement | null) => {
@@ -175,23 +178,21 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     setErrorType(null);
     setIsPermissionDenied(false);
 
-    // Query browser Permissions API if available to inspect and track state
-    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
-      try {
-        const pStatus = await navigator.permissions.query({ name: 'camera' as any });
-        setPermissionQueryState(pStatus.state);
-        pStatus.onchange = () => {
+    // Passively query browser Permissions API for state diagnostics without blocking or destroying user gesture
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'camera' as any })
+        .then(pStatus => {
           setPermissionQueryState(pStatus.state);
-          if (pStatus.state === 'granted' && !streamRef.current) {
-            startCamera(deviceId);
-          }
-        };
-      } catch {
-        // Permissions query not supported for camera in some browsers
-      }
+          pStatus.onchange = () => {
+            setPermissionQueryState(pStatus.state);
+          };
+        })
+        .catch(() => {
+          // Permissions query not supported for camera in some browsers (e.g. Firefox, Safari)
+        });
     }
 
-    // Check secure context
+    // Verify secure context (HTTPS or localhost)
     const isSecure = typeof window !== 'undefined' && (
       window.isSecureContext ||
       window.location.protocol === 'https:' ||
@@ -204,27 +205,17 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       setErrorType('security');
       setErrorTitle('Secure HTTPS Connection Required');
       setCameraError('Camera access is restricted to secure origins (HTTPS). Please ensure you are accessing the deployed application over https://.');
-      setExactErrorDetails(`Current origin is not secure: ${window.location.protocol}//${window.location.host}`);
+      setExactErrorDetails(`Current origin is not secure: ${typeof window !== 'undefined' ? window.location.protocol : ''}//${typeof window !== 'undefined' ? window.location.host : ''}`);
       return;
     }
 
-    // Resolve mediaDevices API with fallback for older browsers
-    const mediaDevices = navigator?.mediaDevices || (
-      (navigator as any)?.getUserMedia ? {
-        getUserMedia: (c: MediaStreamConstraints) =>
-          new Promise<MediaStream>((resolve, reject) => {
-            (navigator as any).getUserMedia(c, resolve, reject);
-          }),
-        enumerateDevices: () => Promise.resolve([])
-      } : null
-    );
-
-    if (!mediaDevices || typeof mediaDevices.getUserMedia !== 'function') {
+    // Verify browser mediaDevices support
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
       setIsLoadingCamera(false);
       setErrorType('unsupported');
       setErrorTitle('Camera API Not Supported');
       setCameraError('The Camera API (navigator.mediaDevices.getUserMedia) is not supported by your current browser or Webview.');
-      setExactErrorDetails(`navigator.mediaDevices: ${typeof navigator?.mediaDevices}, isSecureContext: ${window.isSecureContext}`);
+      setExactErrorDetails(`navigator.mediaDevices: ${typeof navigator?.mediaDevices}, isSecureContext: ${typeof window !== 'undefined' ? window.isSecureContext : false}`);
       return;
     }
 
@@ -234,23 +225,31 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       // 1. Try with exact deviceId if selected by user
       if (deviceId && deviceId.trim()) {
         try {
-          acquiredStream = await mediaDevices.getUserMedia({
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: deviceId } },
             audio: false
           });
         } catch (deviceErr) {
           console.warn('[CameraCaptureModal] Selected deviceId failed, falling back to basic video constraint:', deviceErr);
-          acquiredStream = await mediaDevices.getUserMedia({
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false
           });
         }
       } else {
-        // 2. Standard native browser camera request
-        acquiredStream = await mediaDevices.getUserMedia({
-          video: true,
-          audio: false
-        });
+        // 2. Standard native browser camera request with ideal facing mode
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: facingMode ? { facingMode: { ideal: facingMode } } : true,
+            audio: false
+          });
+        } catch (facingErr) {
+          console.warn('[CameraCaptureModal] Ideal facingMode failed, falling back to standard video constraint:', facingErr);
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
       }
 
       // Check if this request was superseded while waiting for user interaction
@@ -293,13 +292,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       }
 
       refreshDevices();
-    } catch (err: any) {
+    } catch (error: any) {
       if (activeRequestIdRef.current !== currentRequestId) return;
       setIsLoadingCamera(false);
 
-      const errName: string = err?.name || '';
-      const errMsg: string = err?.message || '';
-      console.error('[CameraCaptureModal] getUserMedia failed:', errName, errMsg, err);
+      const errName: string = error?.name || '';
+      const errMsg: string = error?.message || '';
+      console.error("Camera error:", error);
+      console.error("Camera error name:", error?.name);
+      console.error("Camera error message:", error?.message);
 
       const isPolicyBlocked =
         errMsg.toLowerCase().includes('permissions policy') ||
@@ -310,7 +311,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         errMsg.toLowerCase().includes('system') ||
         errMsg.toLowerCase().includes('operating system');
 
-      const technicalSummary = `Error: [${errName || 'Error'}] ${errMsg || 'No error message provided'} | Origin: ${window.location.origin} | Protocol: ${window.location.protocol}`;
+      const technicalSummary = `Error: [${errName || 'Error'}] ${errMsg || 'No error message provided'} | Origin: ${typeof window !== 'undefined' ? window.location.origin : ''} | Protocol: ${typeof window !== 'undefined' ? window.location.protocol : ''} | SecureContext: ${typeof window !== 'undefined' ? window.isSecureContext : false}`;
       setExactErrorDetails(technicalSummary);
 
       if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
@@ -319,7 +320,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           setErrorType('policy');
           setErrorTitle('Camera Blocked by Permissions Policy');
           setCameraError(
-            'Camera access is disallowed by permissions policy. If this application is running inside an iframe or preview bar on Vercel, open the direct URL in a new browser tab.'
+            'Camera access is disallowed by browser Permissions Policy. If this application is running inside a preview iframe or Vercel toolbar, please open the direct URL in a new browser tab.'
           );
         } else if (isSystemBlocked) {
           setErrorType('permission');
@@ -331,7 +332,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           setErrorType('permission');
           setErrorTitle('Camera Permission Denied');
           setCameraError(
-            'Camera permission was denied in your browser for this URL. Please click the camera/lock icon in your browser address bar, choose "Always allow", and click "Retry Camera".'
+            'Camera permission was not granted by your browser. Please click the camera/lock icon in your browser address bar to allow camera access, and click "Retry Camera".'
           );
         }
       } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
@@ -353,7 +354,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         setErrorType('constraints');
         setErrorTitle('Camera Constraints Error');
         setCameraError(
-          `The requested camera constraints are not supported by your hardware (${(err as any)?.constraint || 'unsupported'}). Click "Retry Camera" to reset.`
+          `The requested camera constraints are not supported by your hardware (${(error as any)?.constraint || 'unsupported'}). Click "Retry Camera" to reset.`
         );
       } else if (errName === 'SecurityError') {
         setIsPermissionDenied(false);
@@ -385,7 +386,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         );
       }
     }
-  }, [refreshDevices]);
+  }, [facingMode, refreshDevices]);
 
   // Synchronize stream with video element
   useEffect(() => {
@@ -522,7 +523,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     try {
       if (navigator?.mediaDevices?.getUserMedia) {
         const switchedStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextMode },
+          video: { facingMode: { ideal: nextMode } },
           audio: false
         });
         if (streamRef.current) {

@@ -34,11 +34,11 @@ export const NewInspectionPage: React.FC = () => {
 
   // Synchronize URL search params with activeStep without reverting user actions
   useEffect(() => {
+    if (!isInitializedRef.current) return;
     const currentStepParam = searchParams.get('step');
-    const hasCamera = searchParams.get('camera') || searchParams.get('openCamera');
     const stepStr = activeStep.toString();
 
-    if (currentStepParam !== stepStr || (activeStep !== 2 && hasCamera)) {
+    if (currentStepParam !== stepStr) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set('step', stepStr);
       if (activeStep !== 2) {
@@ -47,7 +47,7 @@ export const NewInspectionPage: React.FC = () => {
       }
       setSearchParams(nextParams, { replace: true });
     }
-  }, [activeStep, searchParams, setSearchParams]);
+  }, [activeStep]);
 
   const stepNames = [
     'Details',

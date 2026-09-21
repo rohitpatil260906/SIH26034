@@ -47,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenArchitecture }) => {
     inspections,
     currentInspection,
     startNewInspection,
+    setActiveStep,
     activeJurisdiction,
     setActiveJurisdiction,
     updateInspectionDetails
@@ -145,7 +146,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenArchitecture }) => {
       description: 'Live continuous barcode & text capture',
       icon: Sparkles,
       onClick: () => {
-        if (!currentInspection) startNewInspection(undefined, 2);
+        if (!currentInspection) {
+          startNewInspection(undefined, 2);
+        } else {
+          setActiveStep(2);
+        }
         navigate('/new-inspection?step=2&camera=open');
       }
     }
