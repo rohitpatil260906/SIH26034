@@ -14,77 +14,13 @@ import {
   FileText,
   ArrowRight,
   Scale,
-  Sparkles,
-  Check,
-  AlertCircle
+  Sparkles
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-
-const GST_STATE_CODES: Record<string, string> = {
-  '01': 'Jammu & Kashmir',
-  '02': 'Himachal Pradesh',
-  '03': 'Punjab',
-  '04': 'Chandigarh',
-  '05': 'Uttarakhand',
-  '06': 'Haryana',
-  '07': 'Delhi',
-  '08': 'Rajasthan',
-  '09': 'Uttar Pradesh',
-  '10': 'Bihar',
-  '11': 'Sikkim',
-  '12': 'Arunachal Pradesh',
-  '13': 'Nagaland',
-  '14': 'Manipur',
-  '15': 'Mizoram',
-  '16': 'Tripura',
-  '17': 'Meghalaya',
-  '18': 'Assam',
-  '19': 'West Bengal',
-  '20': 'Jharkhand',
-  '21': 'Odisha',
-  '22': 'Chhattisgarh',
-  '23': 'Madhya Pradesh',
-  '24': 'Gujarat',
-  '26': 'Dadra & Nagar Haveli and Daman & Diu',
-  '27': 'Maharashtra',
-  '29': 'Karnataka',
-  '30': 'Goa',
-  '31': 'Lakshadweep',
-  '32': 'Kerala',
-  '33': 'Tamil Nadu',
-  '34': 'Puducherry',
-  '36': 'Telangana',
-  '37': 'Andhra Pradesh',
-  '38': 'Ladakh'
-};
-
-const GST_ENTITY_TYPES: Record<string, string> = {
-  C: 'Company (Public / Private Limited)',
-  P: 'Individual / Proprietorship',
-  H: 'Hindu Undivided Family (HUF)',
-  F: 'Partnership Firm / LLP',
-  A: 'Association of Persons (AOP)',
-  T: 'Trust',
-  B: 'Body of Individuals (BOI)',
-  L: 'Local Authority',
-  J: 'Artificial Juridical Person',
-  G: 'Government Entity'
-};
 
 export const DashboardPage: React.FC = () => {
   const { inspections, startNewInspection } = useInspection();
   const navigate = useNavigate();
-
-  // Quick GSTIN verify widget state
-  const [gstinInput, setGstinInput] = useState('');
-  const [gstinStatus, setGstinStatus] = useState<{
-    verified: boolean;
-    validFormat: boolean;
-    state?: string;
-    entityType?: string;
-    pan?: string;
-    message?: string;
-  } | null>(null);
 
   // Live dynamic statistics derived from actual inspections
   const totalInspections = inspections.length;
@@ -123,14 +59,10 @@ export const DashboardPage: React.FC = () => {
       ? ((topViolation[1] / totalViolations) * 100).toFixed(1)
       : '0.0';
 
-    // Standard compounding estimate under Section 48 / Section 36
-    const compoundingRecovery = totalViolations * 25000;
-
     return {
       topViolationName: topViolation ? topViolation[0] : null,
       topViolationCount: topViolation ? topViolation[1] : 0,
-      topViolationPct: topPct,
-      compoundingRecovery
+      topViolationPct: topPct
     };
   }, [inspections, totalViolations]);
 
@@ -143,38 +75,6 @@ export const DashboardPage: React.FC = () => {
   const handleStartScan = () => {
     startNewInspection(undefined, 2);
     navigate('/new-inspection?step=2&camera=open');
-  };
-
-  const handleVerifyGstin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = gstinInput.trim().toUpperCase();
-    if (!clean) return;
-
-    // Standard 15-character GSTIN regex format
-    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    if (!gstinRegex.test(clean)) {
-      setGstinStatus({
-        verified: false,
-        validFormat: false,
-        message: 'Invalid GSTIN structure. Must be a 15-character statutory GSTIN (e.g. 07AAAAA0000A1Z5).'
-      });
-      return;
-    }
-
-    const stateCode = clean.slice(0, 2);
-    const pan = clean.slice(2, 12);
-    const entityChar = clean[5];
-
-    const state = GST_STATE_CODES[stateCode] || `State Code ${stateCode} (Jurisdiction Confirmed)`;
-    const entityType = GST_ENTITY_TYPES[entityChar] || 'Registered Taxpayer Entity';
-
-    setGstinStatus({
-      verified: true,
-      validFormat: true,
-      state,
-      entityType,
-      pan
-    });
   };
 
   return (
@@ -362,180 +262,88 @@ export const DashboardPage: React.FC = () => {
         </Card>
       </div>
 
-      {/* Grid: Charts & Live GSTIN Verifier Tool */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Compliance Distribution Chart (2 cols) */}
-        <div className="lg:col-span-2">
-          <Card orientation="vertical" className="h-full">
-            <CardHeader
-              title="Statutory Compliance Distribution"
-              subtitle="Live breakdown across all audited packaged commodities"
-            />
-            <CardContent>
-              {totalInspections === 0 ? (
-                <div className="py-12 px-4 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                    <ClipboardCheck className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">No Packaging Inspections Recorded Yet</h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Initiate an optical scan or upload a packaging label. As dockets are created and verified, real-time compliance metrics will appear here.
-                  </p>
-                  <Button variant="primary" size="sm" onClick={handleStartScan} className="mt-2">
-                    Scan Product Now
-                  </Button>
+      {/* Compliance Distribution Chart */}
+      <div>
+        <Card orientation="vertical" className="h-full">
+          <CardHeader
+            title="Statutory Compliance Distribution"
+            subtitle="Live breakdown across all audited packaged commodities"
+          />
+          <CardContent>
+            {totalInspections === 0 ? (
+              <div className="py-12 px-4 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                  <ClipboardCheck className="w-6 h-6" />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                  <div className="md:col-span-7 h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={chartData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={55}
-                          outerRadius={80}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: any) => [`${value} Packages`, 'Count']}
-                          contentStyle={{
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #cbd5e1',
-                            borderRadius: '4px',
-                            fontSize: '12px'
-                          }}
-                        />
-                        <Legend
-                          verticalAlign="bottom"
-                          wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Summary Metrics */}
-                  <div className="md:col-span-5 space-y-3 text-xs border-l border-slate-200 pl-4">
-                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
-                      <span className="text-slate-500 font-medium">Most Common Infraction:</span>
-                      <p className="font-bold text-slate-900 truncate">
-                        {violationInsights.topViolationName || 'No violations recorded'}
-                      </p>
-                      <span className="text-[10px] text-slate-500 block">
-                        {violationInsights.topViolationName
-                          ? `${violationInsights.topViolationPct}% of all flagged violations (${violationInsights.topViolationCount} occurrences)`
-                          : 'Zero infractions across audited commodities'}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
-                      <span className="text-slate-500 font-medium">Total Flagged Infractions:</span>
-                      <p className="font-bold text-slate-900 font-mono">{totalViolations}</p>
-                      <span className="text-[10px] text-slate-500 block">
-                        Across {nonCompliantCount} non-compliant inspection dockets
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded space-y-1">
-                      <span className="text-indigo-900 font-medium">Potential Compounding Recovery:</span>
-                      <p className="font-bold text-indigo-950 font-mono text-sm">
-                        ₹ {violationInsights.compoundingRecovery.toLocaleString('en-IN')}
-                      </p>
-                      <span className="text-[10px] text-indigo-700 block">
-                        Estimated under Section 48 compounding guidelines (₹25,000 / infraction)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* GSTIN / Manufacturer Quick Lookup Tool */}
-        <div className="lg:col-span-1">
-          <Card orientation="vertical" className="h-full">
-            <CardHeader
-              title="GSTIN Verification Tool"
-              subtitle="Statutory Ingestion & Manufacturer Jurisdiction Verification"
-            />
-            <CardContent className="space-y-3">
-              <form onSubmit={handleVerifyGstin} className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Manufacturer GSTIN / UIN:
-                </label>
-                <div className="flex space-x-1.5">
-                  <input
-                    type="text"
-                    value={gstinInput}
-                    onChange={(e) => setGstinInput(e.target.value)}
-                    placeholder="e.g. 07AAAAA0000A1Z5"
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs font-mono uppercase text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
-                  />
-                  <Button type="submit" variant="primary" size="sm">
-                    Verify
-                  </Button>
-                </div>
-              </form>
-
-              {gstinStatus && gstinStatus.verified && (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-md text-emerald-950 text-xs space-y-1.5 animate-in fade-in duration-150">
-                  <div className="flex items-center space-x-1.5 font-bold text-emerald-900">
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span>GSTIN FORMAT VALIDATED</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-900 font-medium">
-                    Jurisdiction: <span className="font-bold">{gstinStatus.state}</span>
-                  </p>
-                  <p className="text-[11px] text-emerald-800">
-                    Entity Type: <span className="font-semibold">{gstinStatus.entityType}</span>
-                  </p>
-                  <p className="font-mono text-[10px] text-emerald-700">
-                    PAN: {gstinStatus.pan} • Statutory Format Compliant
-                  </p>
-                </div>
-              )}
-
-              {gstinStatus && !gstinStatus.verified && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-950 text-xs space-y-1 animate-in fade-in duration-150">
-                  <div className="flex items-center space-x-1.5 font-bold text-red-900">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span>VALIDATION FAILED</span>
-                  </div>
-                  <p className="text-[11px] text-red-700 leading-relaxed">
-                    {gstinStatus.message}
-                  </p>
-                </div>
-              )}
-
-              <div className="pt-2 border-t border-slate-200">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
-                  Verification Rules Checked:
-                </span>
-                <ul className="text-[11px] text-slate-600 space-y-1">
-                  <li className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                    <span>Rule 6(1)(a) Registered manufacturer identity</span>
-                  </li>
-                  <li className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                    <span>Rule 27 E-Commerce marketplace seller validation</span>
-                  </li>
-                  <li className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                    <span>State / UT territorial jurisdiction alignment</span>
-                  </li>
-                </ul>
+                <h3 className="text-sm font-bold text-slate-800">No Packaging Inspections Recorded Yet</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Initiate an optical scan or upload a packaging label. As dockets are created and verified, real-time compliance metrics will appear here.
+                </p>
+                <Button variant="primary" size="sm" onClick={handleStartScan} className="mt-2">
+                  Scan Product Now
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                <div className="md:col-span-7 h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: any) => [`${value} Packages`, 'Count']}
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '4px',
+                          fontSize: '12px'
+                        }}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Summary Metrics */}
+                <div className="md:col-span-5 space-y-3 text-xs border-l border-slate-200 pl-4">
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
+                    <span className="text-slate-500 font-medium">Most Common Infraction:</span>
+                    <p className="font-bold text-slate-900 truncate">
+                      {violationInsights.topViolationName || 'No violations recorded'}
+                    </p>
+                    <span className="text-[10px] text-slate-500 block">
+                      {violationInsights.topViolationName
+                        ? `${violationInsights.topViolationPct}% of all flagged violations (${violationInsights.topViolationCount} occurrences)`
+                        : 'Zero infractions across audited commodities'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded space-y-1">
+                    <span className="text-slate-500 font-medium">Total Flagged Infractions:</span>
+                    <p className="font-bold text-slate-900 font-mono">{totalViolations}</p>
+                    <span className="text-[10px] text-slate-500 block">
+                      Across {nonCompliantCount} non-compliant inspection dockets
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Grid: Recent Inspections & Priority Violations */}
