@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { InspectionRecord } from '../../types';
 import { Button } from '../ui/Button';
 import { StatusBadge } from '../ui/Badge';
@@ -12,6 +12,7 @@ import {
   QrCode,
   CheckCircle2,
   AlertOctagon,
+  AlertCircle,
   Scale,
   FileText,
   FileCode
@@ -21,20 +22,87 @@ import { getPdfReportUrl, getDocxReportUrl, getLabelMeJsonUrl } from '../../serv
 
 export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({ inspection }) => {
   const navigate = useNavigate();
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [isDocxLoading, setIsDocxLoading] = useState(false);
+  const [isLabelMeLoading, setIsLabelMeLoading] = useState(false);
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const docketId = inspection.scanId || inspection.id;
-    window.open(getPdfReportUrl(docketId), '_blank');
+    setIsPdfLoading(true);
+    setDownloadError(null);
+    try {
+      const res = await fetch(getPdfReportUrl(docketId));
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${docketId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error('PDF service returned ' + res.status);
+      }
+    } catch {
+      setDownloadError('Backend ReportLab PDF generation service is currently offline. You can use "Print" to save as official PDF directly, or export as CSV/JSON.');
+    } finally {
+      setIsPdfLoading(false);
+    }
   };
 
-  const handleDownloadDOCX = () => {
+  const handleDownloadDOCX = async () => {
     const docketId = inspection.scanId || inspection.id;
-    window.open(getDocxReportUrl(docketId), '_blank');
+    setIsDocxLoading(true);
+    setDownloadError(null);
+    try {
+      const res = await fetch(getDocxReportUrl(docketId));
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `report_${docketId}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error('DOCX service returned ' + res.status);
+      }
+    } catch {
+      setDownloadError('Backend DOCX generation service is offline. You can export declarations as CSV or JSON.');
+    } finally {
+      setIsDocxLoading(false);
+    }
   };
 
-  const handleDownloadLabelMe = () => {
+  const handleDownloadLabelMe = async () => {
     const docketId = inspection.scanId || inspection.id;
-    window.open(getLabelMeJsonUrl(docketId), '_blank');
+    setIsLabelMeLoading(true);
+    setDownloadError(null);
+    try {
+      const res = await fetch(getLabelMeJsonUrl(docketId));
+      if (res.ok) {
+        const data = await res.json();
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+        const a = document.createElement('a');
+        a.href = dataStr;
+        a.download = `labelme_${docketId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        throw new Error('LabelMe service returned ' + res.status);
+      }
+    } catch {
+      // Fallback to client-side inspection JSON
+      handleExportJSON();
+    } finally {
+      setIsLabelMeLoading(false);
+    }
   };
 
   const handlePrint = () => {
@@ -87,8 +155,25 @@ export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<FileSpreadsheet className="w-4 h-4 text-emerald-600" />}
+            onClick={handleExportCSV}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<FileCode className="w-4 h-4 text-slate-600" />}
+            onClick={handleExportJSON}
+          >
+            Export JSON
+          </Button>
+          <Button
             variant="secondary"
             size="sm"
+            isLoading={isLabelMeLoading}
             leftIcon={<FileCode className="w-4 h-4 text-emerald-600" />}
             onClick={handleDownloadLabelMe}
           >
@@ -97,18 +182,20 @@ export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({
           <Button
             variant="secondary"
             size="sm"
+            isLoading={isDocxLoading}
             leftIcon={<FileText className="w-4 h-4 text-blue-600" />}
             onClick={handleDownloadDOCX}
           >
-            Download Word (DOCX)
+            Word DOCX
           </Button>
           <Button
             variant="primary"
             size="sm"
+            isLoading={isPdfLoading}
             leftIcon={<Download className="w-4 h-4 text-white" />}
             onClick={handleDownloadPDF}
           >
-            ReportLab PDF
+            PDF Report
           </Button>
           <Button
             variant="outline"
@@ -120,6 +207,22 @@ export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({
           </Button>
         </div>
       </div>
+
+      {downloadError && (
+        <div className="no-print p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900 flex items-start space-x-2 animate-fade-in">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-semibold">Notice: </span>
+            {downloadError}
+          </div>
+          <button
+            onClick={() => setDownloadError(null)}
+            className="text-amber-700 hover:text-amber-900 font-bold ml-2 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Official Government Inspection Document Container */}
       <div className="print-report-container bg-white border border-slate-300 rounded-md shadow-sm max-w-4xl mx-auto p-6 md:p-10 font-serif text-slate-900 space-y-6">
@@ -157,8 +260,19 @@ export const OfficialReportView: React.FC<{ inspection: InspectionRecord }> = ({
               <span className="font-bold text-slate-950">{inspection.date}</span>
             </div>
             <div className="p-2">
-              <span className="text-[10px] text-slate-500 uppercase block">Jurisdiction Zone</span>
-              <span className="font-bold text-slate-950">{inspection.jurisdiction}</span>
+              <span className="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Jurisdiction</span>
+              <div className="font-bold text-slate-950 leading-tight space-y-0.5 text-xs">
+                <div>{inspection.jurisdictionDetails?.country || 'India'}</div>
+                {inspection.jurisdictionDetails?.state ? (
+                  <div>{inspection.jurisdictionDetails.state}</div>
+                ) : (
+                  <div>{inspection.jurisdiction || 'Delhi'}</div>
+                )}
+                {inspection.jurisdictionDetails?.city && <div>{inspection.jurisdictionDetails.city}</div>}
+                {inspection.jurisdictionDetails?.pinCode && (
+                  <div className="font-mono text-slate-800">PIN: {inspection.jurisdictionDetails.pinCode}</div>
+                )}
+              </div>
             </div>
             <div className="p-2">
               <span className="text-[10px] text-slate-500 uppercase block">Inspection Nature</span>

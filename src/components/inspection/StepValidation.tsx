@@ -36,6 +36,7 @@ export const StepValidation: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [inspectingCheck, setInspectingCheck] = useState<ComplianceCheckItem | null>(null);
+  const [focusedCard, setFocusedCard] = useState<number | null>(null);
 
   if (!currentInspection) return null;
 
@@ -155,57 +156,74 @@ export const StepValidation: React.FC = () => {
         </div>
       </div>
 
-      {/* Compliance Assessment KPI Summary Cards */}
+      {/* Compliance Assessment KPI Summary Cards (Click-to-Focus / Zoom) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
-        <div className="bg-white border border-slate-200 rounded-md p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Compliance Score</span>
-            <span className={`text-xl font-bold mt-0.5 block ${
-              evaluationResult.complianceScore >= 90
-                ? 'text-emerald-700'
-                : evaluationResult.complianceScore >= 70
-                ? 'text-amber-600'
-                : 'text-red-700'
-            }`}>
-              {evaluationResult.complianceScore}%
-            </span>
-          </div>
-          <Scale className="w-6 h-6 text-[#0f2942]" />
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-md p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Applicable Rules</span>
-            <span className="text-xl font-bold text-slate-900 mt-0.5 block">
-              {applicableCount} <span className="text-xs text-slate-400 font-normal">/ 34</span>
-            </span>
-          </div>
-          <BookOpen className="w-6 h-6 text-slate-400" />
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-md p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Compliant (PASS)</span>
-            <span className="text-xl font-bold text-emerald-700 mt-0.5 block">{passCount}</span>
-          </div>
-          <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-md p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Statutory Infractions</span>
-            <span className="text-xl font-bold text-red-700 mt-0.5 block">{failCount}</span>
-          </div>
-          <XCircle className="w-6 h-6 text-red-600" />
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-md p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Exempt / Not Applicable</span>
-            <span className="text-xl font-bold text-slate-600 mt-0.5 block">{notApplicableCount}</span>
-          </div>
-          <ShieldCheck className="w-6 h-6 text-slate-400" />
-        </div>
+        {[
+          {
+            id: 0,
+            label: 'Compliance Score',
+            value: `${evaluationResult.complianceScore}%`,
+            valueColor: evaluationResult.complianceScore >= 90 ? 'text-emerald-700' : evaluationResult.complianceScore >= 70 ? 'text-amber-600' : 'text-red-700',
+            icon: Scale,
+            iconColor: 'text-[#6D28D9]',
+          },
+          {
+            id: 1,
+            label: 'Applicable Rules',
+            value: `${applicableCount}`,
+            suffix: '/ 34',
+            valueColor: 'text-slate-900',
+            icon: BookOpen,
+            iconColor: 'text-slate-400',
+          },
+          {
+            id: 2,
+            label: 'Compliant (PASS)',
+            value: `${passCount}`,
+            valueColor: 'text-emerald-700',
+            icon: CheckCircle2,
+            iconColor: 'text-emerald-600',
+          },
+          {
+            id: 3,
+            label: 'Statutory Infractions',
+            value: `${failCount}`,
+            valueColor: 'text-red-700',
+            icon: XCircle,
+            iconColor: 'text-red-600',
+          },
+          {
+            id: 4,
+            label: 'Exempt / Not Applicable',
+            value: `${notApplicableCount}`,
+            valueColor: 'text-slate-600',
+            icon: ShieldCheck,
+            iconColor: 'text-slate-400',
+          },
+        ].map((card) => {
+          const isFocused = focusedCard === card.id;
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.id}
+              onClick={() => setFocusedCard(isFocused ? null : card.id)}
+              className={`bg-white border rounded-md p-3.5 flex items-center justify-between cursor-pointer select-none transition-all duration-250 ease-out ${
+                isFocused
+                  ? 'scale-[1.04] shadow-md border-[#7C3AED] ring-2 ring-[#7C3AED]/30 z-10'
+                  : 'border-slate-200 hover:border-slate-300 hover:shadow-2xs'
+              }`}
+              title="Click to focus card"
+            >
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">{card.label}</span>
+                <span className={`text-xl font-bold mt-0.5 block ${card.valueColor}`}>
+                  {card.value} {card.suffix && <span className="text-xs text-slate-400 font-normal">{card.suffix}</span>}
+                </span>
+              </div>
+              <Icon className={`w-6 h-6 ${card.iconColor}`} />
+            </div>
+          );
+        })}
       </div>
 
       {/* Tab Switcher Header */}
@@ -215,7 +233,7 @@ export const StepValidation: React.FC = () => {
           onClick={() => setActiveTab('rules-matrix')}
           className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer ${
             activeTab === 'rules-matrix'
-              ? 'border-[#0f2942] text-[#0f2942] bg-slate-50'
+              ? 'border-[#7C3AED] text-[#6D28D9] bg-[#F5F3FF]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -231,7 +249,7 @@ export const StepValidation: React.FC = () => {
           onClick={() => setActiveTab('declarations')}
           className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer ${
             activeTab === 'declarations'
-              ? 'border-[#0f2942] text-[#0f2942] bg-slate-50'
+              ? 'border-[#7C3AED] text-[#6D28D9] bg-[#F5F3FF]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -247,7 +265,7 @@ export const StepValidation: React.FC = () => {
           onClick={() => setActiveTab('lines')}
           className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition cursor-pointer ${
             activeTab === 'lines'
-              ? 'border-[#0f2942] text-[#0f2942] bg-slate-50'
+              ? 'border-[#7C3AED] text-[#6D28D9] bg-[#F5F3FF]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >

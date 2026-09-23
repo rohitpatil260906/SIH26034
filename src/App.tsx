@@ -33,22 +33,23 @@ export const App: React.FC = () => {
       <InspectionProvider>
         <BrowserRouter>
           <Routes>
-            {/* Public Auth Route */}
+            {/* Public Auth Routes */}
+            <Route path="/" element={<LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
 
             {/* Protected Application Routes inside AppShell */}
             <Route
-              path="/"
               element={
                 <ProtectedRoute>
                   <AppShell />
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="scan" element={<NewInspectionPage />} />
               <Route path="new-inspection" element={<NewInspectionPage />} />
               <Route path="inspections" element={<InspectionHistoryPage />} />
+              <Route path="history" element={<InspectionHistoryPage />} />
               <Route path="reports" element={<InspectionHistoryPage />} />
               <Route path="reports/:id" element={<InspectionDetailPage />} />
               <Route path="products" element={<ProductRepositoryPage />} />

@@ -93,10 +93,10 @@ export const StepViolations: React.FC = () => {
                     <div
                       key={`${vio.id}-${index}`}
                       onClick={() => setSelectedViolation(vio)}
-                      className={`p-3 rounded-md border transition-all cursor-pointer space-y-2 ${
+                      className={`p-3 rounded-md border cursor-pointer space-y-2 select-none transition-all duration-200 ease-out ${
                         isSelected
-                          ? 'border-red-600 bg-red-50/20 ring-1 ring-red-600'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
+                          ? 'border-red-600 bg-red-50/20 ring-2 ring-red-600/40 scale-[1.02] shadow-md z-10'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-2xs'
                       }`}
                     >
                       <div className="flex items-start justify-between">

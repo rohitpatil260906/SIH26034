@@ -133,9 +133,9 @@ export const LegalNoticePage: React.FC = () => {
             size="sm"
             onClick={handleDispatchNotice}
             disabled={isDispatched}
-            className="flex items-center space-x-1.5 bg-[#0f2942] hover:bg-[#163a5f]"
+            className="flex items-center space-x-1.5"
           >
-            <Send className="w-4 h-4 text-amber-300" />
+            <Send className="w-4 h-4 text-white" />
             <span>{isDispatched ? 'Notice Dispatched' : 'Dispatch via Speed Post & Email'}</span>
           </Button>
         </div>
@@ -184,7 +184,7 @@ export const LegalNoticePage: React.FC = () => {
                     setSelectedInspectionId(e.target.value);
                     setIsDispatched(false);
                   }}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#0f2942]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-[#7C3AED]"
                 >
                   {inspections.map((insp) => (
                     <option key={insp.id} value={insp.id}>
@@ -232,7 +232,7 @@ export const LegalNoticePage: React.FC = () => {
                       name="noticeType"
                       checked={noticeType === 'SHOW_CAUSE'}
                       onChange={() => setNoticeType('SHOW_CAUSE')}
-                      className="text-[#0f2942] focus:ring-[#0f2942]"
+                      className="text-[#7C3AED] focus:ring-[#7C3AED]"
                     />
                     <div>
                       <span className="font-semibold text-slate-900 block">Show Cause Notice</span>
@@ -246,7 +246,7 @@ export const LegalNoticePage: React.FC = () => {
                       name="noticeType"
                       checked={noticeType === 'COMPOUNDING'}
                       onChange={() => setNoticeType('COMPOUNDING')}
-                      className="text-[#0f2942] focus:ring-[#0f2942]"
+                      className="text-[#7C3AED] focus:ring-[#7C3AED]"
                     />
                     <div>
                       <span className="font-semibold text-slate-900 block">Compounding Demand Challan</span>
@@ -260,7 +260,7 @@ export const LegalNoticePage: React.FC = () => {
                       name="noticeType"
                       checked={noticeType === 'PROSECUTION'}
                       onChange={() => setNoticeType('PROSECUTION')}
-                      className="text-[#0f2942] focus:ring-[#0f2942]"
+                      className="text-[#7C3AED] focus:ring-[#7C3AED]"
                     />
                     <div>
                       <span className="font-semibold text-slate-900 block">Prosecution Sanction</span>
@@ -275,7 +275,7 @@ export const LegalNoticePage: React.FC = () => {
                 <select
                   value={offenceCount}
                   onChange={(e) => setOffenceCount(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#0f2942]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 focus:border-[#7C3AED] focus:outline-none"
                 >
                   <option value="FIRST">First Offence (Sec 36(1) — ₹25,000)</option>
                   <option value="SECOND">Second Offence (Sec 36(1) — ₹50,000)</option>
@@ -301,9 +301,9 @@ export const LegalNoticePage: React.FC = () => {
                       key={days}
                       type="button"
                       onClick={() => setHearingDays(days)}
-                      className={`flex-1 py-1 rounded text-xs font-semibold border transition ${
+                      className={`flex-1 py-1 rounded text-xs font-semibold border transition cursor-pointer ${
                         hearingDays === days
-                          ? 'bg-[#0f2942] text-white border-[#0f2942]'
+                          ? 'bg-[#7C3AED] text-white border-[#7C3AED]'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                       }`}
                     >
@@ -329,7 +329,11 @@ export const LegalNoticePage: React.FC = () => {
               <p className="font-mono text-[10px] text-slate-500">
                 Badge: {currentUser?.badgeNumber || activeInspection.officerBadge}
               </p>
-              <p>{activeInspection.jurisdiction}</p>
+              <p className="font-medium text-slate-800">
+                {activeInspection.jurisdictionDetails
+                  ? `${activeInspection.jurisdictionDetails.state}, ${activeInspection.jurisdictionDetails.city} (${activeInspection.jurisdictionDetails.pinCode})`
+                  : activeInspection.jurisdiction}
+              </p>
             </div>
           </Card>
         </div>
@@ -353,7 +357,8 @@ export const LegalNoticePage: React.FC = () => {
                 DEPARTMENT OF CONSUMER AFFAIRS • LEGAL METROLOGY DIVISION
               </p>
               <p className="text-[11px] font-sans text-slate-500">
-                OFFICE OF THE CONTROLLER OF LEGAL METROLOGY • {activeInspection.jurisdiction.toUpperCase()}
+                OFFICE OF THE CONTROLLER OF LEGAL METROLOGY •{' '}
+                {(activeInspection.jurisdictionDetails?.state || activeInspection.jurisdiction || 'DELHI').toUpperCase()}
               </p>
             </div>
 
@@ -395,7 +400,7 @@ export const LegalNoticePage: React.FC = () => {
             </div>
 
             {/* Subject & Reference */}
-            <div className="bg-slate-50 border-l-4 border-[#0f2942] p-3 text-xs font-sans mb-5 space-y-1">
+            <div className="bg-slate-50 border-l-4 border-[#7C3AED] p-3 text-xs font-sans mb-5 space-y-1">
               <p>
                 <span className="font-bold text-slate-900">SUB: </span>
                 Contravention of Legal Metrology (Packaged Commodities) Rules, 2011 detected in commodity:{' '}
@@ -505,7 +510,11 @@ export const LegalNoticePage: React.FC = () => {
                 <p className="text-[10px] font-mono text-slate-500">
                   Badge: {currentUser?.badgeNumber || activeInspection.officerBadge}
                 </p>
-                <p className="text-[10px] text-slate-500">{activeInspection.jurisdiction}</p>
+                <p className="text-[10px] text-slate-500">
+                  {activeInspection.jurisdictionDetails
+                    ? `${activeInspection.jurisdictionDetails.city}, ${activeInspection.jurisdictionDetails.state} - ${activeInspection.jurisdictionDetails.pinCode}`
+                    : activeInspection.jurisdiction}
+                </p>
               </div>
             </div>
           </div>

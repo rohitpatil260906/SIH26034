@@ -7,6 +7,7 @@ export interface User {
   role: OfficerRole;
   department: string;
   jurisdictionZone: string;
+  jurisdictionDetails?: Jurisdiction;
   email: string;
   phone: string;
   status: 'Active' | 'On Leave' | 'Suspended';
@@ -438,12 +439,20 @@ export interface ComplianceCheckItem {
   originalText?: string;
 }
 
+export interface Jurisdiction {
+  country: string;
+  state: string;
+  city: string;
+  pinCode: string;
+}
+
 export interface InspectionRecord {
   id: string;
   date: string;
   officerName: string;
   officerBadge: string;
-  jurisdiction: string;
+  jurisdiction: string; // Formatted summary string for display
+  jurisdictionDetails?: Jurisdiction;
   location: string;
   inspectionType: InspectionType;
   productName: string;

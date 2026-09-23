@@ -71,8 +71,8 @@ export const StepAnalysis: React.FC = () => {
         <CardContent className="space-y-6">
           {/* Main Trigger / Progress Banner */}
           {!hasRunAnalysis && !isAnalyzing ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-md p-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-[#0f2942]/10 text-[#0f2942] flex items-center justify-center mx-auto">
+            <div className="bg-[#FAF9F7] border border-[#E5E2DD] rounded-xl p-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-[#F5F3FF] text-[#6D28D9] flex items-center justify-center mx-auto">
                 <ScanLine className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-bold text-slate-900">
@@ -100,11 +100,11 @@ export const StepAnalysis: React.FC = () => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-800">
                   <span>{isAnalyzing ? 'Analysis Pipeline in Progress...' : 'Inspection Pipeline Complete'}</span>
-                  <span className="font-mono text-[#0f2942]">{analysisProgress}%</span>
+                  <span className="font-mono text-[#7C3AED]">{analysisProgress}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-[#0f2942] transition-all duration-300 ease-out"
+                    className="h-full bg-[#7C3AED] transition-all duration-300 ease-out"
                     style={{ width: `${analysisProgress}%` }}
                   />
                 </div>
@@ -152,7 +152,7 @@ export const StepAnalysis: React.FC = () => {
                     {status === 'completed' ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                     ) : status === 'running' ? (
-                      <Loader2 className="w-4 h-4 text-[#0f2942] animate-spin shrink-0" />
+                      <Loader2 className="w-4 h-4 text-[#7C3AED] animate-spin shrink-0" />
                     ) : (
                       <Circle className="w-4 h-4 text-slate-300 shrink-0" />
                     )}

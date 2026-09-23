@@ -45,6 +45,7 @@ export const AnalyticsPage: React.FC = () => {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResponse | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
   const [isLoadingBenchmark, setIsLoadingBenchmark] = useState<boolean>(false);
+  const [focusedCard, setFocusedCard] = useState<number | null>(null);
 
   const loadBenchmark = async () => {
     setIsLoadingBenchmark(true);
@@ -167,7 +168,7 @@ export const AnalyticsPage: React.FC = () => {
           onClick={() => setActiveTab('analytics')}
           className={`pb-2.5 px-3 text-xs font-semibold cursor-pointer border-b-2 transition ${
             activeTab === 'analytics'
-              ? 'border-[#0f2942] text-[#0f2942]'
+              ? 'border-[#7C3AED] text-[#6D28D9]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -181,7 +182,7 @@ export const AnalyticsPage: React.FC = () => {
           }}
           className={`pb-2.5 px-3 text-xs font-semibold cursor-pointer border-b-2 transition flex items-center space-x-1.5 ${
             activeTab === 'benchmark'
-              ? 'border-[#0f2942] text-[#0f2942]'
+              ? 'border-[#7C3AED] text-[#6D28D9]'
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -192,9 +193,17 @@ export const AnalyticsPage: React.FC = () => {
 
       {activeTab === 'analytics' ? (
         <>
-          {/* Top 3 Summary Cards */}
+          {/* Top 3 Summary Cards (Click-to-Focus / Zoom) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-4">
+            <div
+              onClick={() => setFocusedCard(focusedCard === 1 ? null : 1)}
+              className={`bg-white border rounded-xl p-4 transition-all duration-250 ease-out cursor-pointer select-none ${
+                focusedCard === 1
+                  ? 'scale-[1.03] shadow-md border-[#7C3AED] ring-2 ring-[#7C3AED]/30 z-10'
+                  : 'border-[#E5E2DD] hover:border-[#D8D4CE]'
+              }`}
+              title="Click to focus card"
+            >
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 National Average Compliance
               </span>
@@ -204,9 +213,17 @@ export const AnalyticsPage: React.FC = () => {
               <span className="text-[11px] text-slate-500 mt-1 block">
                 {compliantCount} of {totalInspections} audited packages compliant
               </span>
-            </Card>
+            </div>
 
-            <Card className="p-4">
+            <div
+              onClick={() => setFocusedCard(focusedCard === 2 ? null : 2)}
+              className={`bg-white border rounded-xl p-4 transition-all duration-250 ease-out cursor-pointer select-none ${
+                focusedCard === 2
+                  ? 'scale-[1.03] shadow-md border-[#7C3AED] ring-2 ring-[#7C3AED]/30 z-10'
+                  : 'border-[#E5E2DD] hover:border-[#D8D4CE]'
+              }`}
+              title="Click to focus card"
+            >
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Estimated Compounding Potential
               </span>
@@ -216,19 +233,27 @@ export const AnalyticsPage: React.FC = () => {
               <span className="text-[11px] text-slate-500 mt-1 block">
                 Across {totalViolations} detected statutory infractions
               </span>
-            </Card>
+            </div>
 
-            <Card className="p-4">
+            <div
+              onClick={() => setFocusedCard(focusedCard === 3 ? null : 3)}
+              className={`bg-white border rounded-xl p-4 transition-all duration-250 ease-out cursor-pointer select-none ${
+                focusedCard === 3
+                  ? 'scale-[1.03] shadow-md border-[#7C3AED] ring-2 ring-[#7C3AED]/30 z-10'
+                  : 'border-[#E5E2DD] hover:border-[#D8D4CE]'
+              }`}
+              title="Click to focus card"
+            >
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
                 Port-of-Entry Detention Actions
               </span>
-              <span className="text-2xl font-bold text-[#0f2942] font-mono mt-1 block">
+              <span className="text-2xl font-bold text-[#6D28D9] font-mono mt-1 block">
                 {portDetentions}
               </span>
               <span className="text-[11px] text-slate-500 mt-1 block">
                 Rule 6(1)(a) & Rule 25 imported packaging holds
               </span>
-            </Card>
+            </div>
           </div>
 
           {/* Grid Layout: Charts and Breakdown */}
@@ -249,7 +274,7 @@ export const AnalyticsPage: React.FC = () => {
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="total" name="Total Packages Audited" fill="#0f2942" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="total" name="Total Packages Audited" fill="#7C3AED" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="compliant" name="Fully Compliant" fill="#10b981" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="violations" name="Statutory Violations" fill="#ef4444" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -314,7 +339,7 @@ export const AnalyticsPage: React.FC = () => {
                         </div>
                         <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-[#0f2942]"
+                            className="h-full bg-[#7C3AED]"
                             style={{ width: `${Math.min(100, Math.max(8, item.violations * 20))}%` }}
                           />
                         </div>
@@ -372,8 +397,8 @@ export const AnalyticsPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3.5">
             <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-md bg-[#0f2942] text-white">
-                <Award className="w-5 h-5 text-amber-400" />
+              <div className="p-2 rounded-md bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE]">
+                <Award className="w-5 h-5 text-[#6D28D9]" />
               </div>
               <div>
                 <span className="font-bold text-slate-900 text-xs font-mono block">

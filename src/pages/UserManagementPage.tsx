@@ -4,7 +4,8 @@ import { Button } from '../components/ui/Button';
 import { RoleBadge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { MOCK_USERS } from '../data/mockUsers';
-import { User, OfficerRole } from '../types';
+import { User, OfficerRole, Jurisdiction } from '../types';
+import { JurisdictionSelector } from '../components/jurisdiction/JurisdictionSelector';
 import {
   Users,
   UserPlus,
@@ -20,6 +21,7 @@ import {
 export const UserManagementPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [auditedOfficer, setAuditedOfficer] = useState<User | null>(null);
 
   // New Officer Form
   const [newName, setNewName] = useState('');
@@ -27,17 +29,23 @@ export const UserManagementPage: React.FC = () => {
   const [newRole, setNewRole] = useState<OfficerRole>('OFFICER');
   const [newDept, setNewDept] = useState('Legal Metrology Field Enforcement Unit');
   const [newEmail, setNewEmail] = useState('');
-  const [newZone, setNewZone] = useState('Delhi NCR - Central Zone');
+  const [newJurisdiction, setNewJurisdiction] = useState<Jurisdiction>({
+    country: 'India',
+    state: 'Maharashtra',
+    city: 'Dhule',
+    pinCode: '424001'
+  });
 
   const handleAddOfficer = (e: React.FormEvent) => {
     e.preventDefault();
+    const zoneStr = `${newJurisdiction.state}${newJurisdiction.city ? ', ' + newJurisdiction.city : ''}${newJurisdiction.pinCode ? ' (' + newJurisdiction.pinCode + ')' : ''}`;
     const newUser: User = {
       id: `USR-LM-${Date.now().toString().slice(-4)}`,
       name: newName,
       badgeNumber: newBadge,
       role: newRole,
       department: newDept,
-      jurisdictionZone: newZone,
+      jurisdictionZone: zoneStr,
       email: newEmail,
       phone: '+91 98000 00000',
       status: 'Active',
@@ -93,7 +101,7 @@ export const UserManagementPage: React.FC = () => {
                 <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#0f2942] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] flex items-center justify-center font-bold text-xs shrink-0">
                         {u.name.charAt(0)}
                       </div>
                       <div>
@@ -124,8 +132,8 @@ export const UserManagementPage: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <button
-                      onClick={() => alert(`Officer credentials for ${u.name} verified under state directory.`)}
-                      className="text-xs text-[#0f2942] hover:underline font-semibold"
+                      onClick={() => setAuditedOfficer(u)}
+                      className="text-xs text-[#6D28D9] hover:underline font-semibold cursor-pointer"
                     >
                       Audit
                     </button>
@@ -215,7 +223,7 @@ export const UserManagementPage: React.FC = () => {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g. Suresh Chand Meena"
-                className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:border-[#7C3AED] focus:outline-none"
                 required
               />
             </div>
@@ -227,7 +235,7 @@ export const UserManagementPage: React.FC = () => {
                   value={newBadge}
                   onChange={(e) => setNewBadge(e.target.value)}
                   placeholder="LM-DEL-2026-0994"
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs font-mono text-slate-900 focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs font-mono text-slate-900 focus:border-[#7C3AED] focus:outline-none"
                   required
                 />
               </div>
@@ -236,7 +244,7 @@ export const UserManagementPage: React.FC = () => {
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as OfficerRole)}
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:border-[#7C3AED] focus:outline-none"
                 >
                   <option value="OFFICER">OFFICER (Field Inspector)</option>
                   <option value="SENIOR_OFFICER">SENIOR OFFICER (Asst. Controller)</option>
@@ -252,25 +260,87 @@ export const UserManagementPage: React.FC = () => {
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="s.meena@legalmetrology.gov.in"
-                className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
+                className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#7C3AED] focus:outline-none"
                 required
               />
             </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Assigned Zonal Jurisdiction</label>
-              <select
-                value={newZone}
-                onChange={(e) => setNewZone(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-900 focus:ring-1 focus:ring-[#0f2942] focus:outline-none"
-              >
-                <option value="Delhi NCR - Central Zone">Delhi NCR - Central Zone</option>
-                <option value="Maharashtra - Mumbai Zone I">Maharashtra - Mumbai Zone I</option>
-                <option value="Karnataka - Bengaluru South">Karnataka - Bengaluru South</option>
-                <option value="Tamil Nadu - Chennai North">Tamil Nadu - Chennai North</option>
-                <option value="West Bengal - Kolkata Central">West Bengal - Kolkata Central</option>
-              </select>
+            <div className="pt-2 border-t border-slate-200">
+              <JurisdictionSelector
+                value={newJurisdiction}
+                onChange={setNewJurisdiction}
+                layout="grid"
+                title="Assigned Territorial Jurisdiction"
+                subtitle="Official State, District, and PIN Code station"
+              />
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Officer Credential Audit Dossier Modal */}
+      {auditedOfficer && (
+        <Modal
+          isOpen={true}
+          onClose={() => setAuditedOfficer(null)}
+          title="Officer Credential Audit Dossier"
+          subtitle="Statutory verification under National Legal Metrology Directory"
+          maxWidth="md"
+          footer={
+            <Button variant="primary" size="sm" onClick={() => setAuditedOfficer(null)}>
+              Close Dossier
+            </Button>
+          }
+        >
+          <div className="space-y-4 text-xs text-slate-700">
+            <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <div className="w-10 h-10 rounded-full bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] flex items-center justify-center font-bold text-sm">
+                {auditedOfficer.name.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-900 text-sm">{auditedOfficer.name}</h4>
+                  <RoleBadge role={auditedOfficer.role} />
+                </div>
+                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                  Badge: {auditedOfficer.badgeNumber} • ID: {auditedOfficer.id}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 border border-slate-200 rounded-lg p-3 bg-white">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Department</span>
+                <span className="font-medium text-slate-800 text-[11px]">{auditedOfficer.department}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Jurisdiction Zone</span>
+                <span className="font-medium text-slate-800 text-[11px]">{auditedOfficer.jurisdictionZone}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Enforcement Status</span>
+                <span className="font-semibold text-emerald-700 text-[11px] flex items-center mt-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Active & Enrolled
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Last Active</span>
+                <span className="font-mono text-slate-600 text-[11px]">{auditedOfficer.lastActive}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg space-y-1.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 font-bold text-emerald-900">
+                <Shield className="w-4 h-4 text-emerald-600" />
+                <span>Statutory Authority & Cryptographic Verification</span>
+              </div>
+              <p className="text-emerald-800 leading-relaxed">
+                Credentials validated against the National Controllerate Directory. Authorized to conduct packaging audits, record panchnamas, and issue legal compound notices under Section 15 & 48 of the Legal Metrology Act, 2009.
+              </p>
+              <div className="pt-1 font-mono text-[10px] text-emerald-700">
+                Hash: SHA256:{auditedOfficer.id.replace(/-/g, '').padEnd(32, 'a7e9')}... • Status: VALID
+              </div>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

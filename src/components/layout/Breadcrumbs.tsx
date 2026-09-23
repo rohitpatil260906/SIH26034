@@ -4,29 +4,37 @@ import { ChevronRight, Home } from 'lucide-react';
 
 export const Breadcrumbs: React.FC = () => {
   const location = useLocation();
-  const pathnames = location.pathname.split('/').filter(x => x);
+  const pathnames = location.pathname.split('/').filter((x) => x);
 
   const getBreadcrumbTitle = (path: string) => {
     switch (path) {
-      case 'dashboard': return 'Operational Overview';
-      case 'new-inspection': return 'New Inspection';
-      case 'inspections': return 'Inspections Registry';
-      case 'products': return 'Product Repository';
-      case 'violations': return 'Violations & Evidence';
-      case 'reports': return 'Official Reports';
+      case 'dashboard': return 'Dashboard';
+      case 'new-inspection': return 'Scan & Analyze';
+      case 'scan': return 'Scan & Analyze';
+      case 'inspections': return 'Inspections';
+      case 'history': return 'History';
+      case 'products': return 'Products';
+      case 'violations': return 'Violations';
+      case 'reports': return 'Reports';
       case 'rules': return 'Rule Library';
-      case 'analytics': return 'Enforcement Analytics';
-      case 'audit-log': return 'Audit Trail & Logs';
+      case 'analytics': return 'Analytics';
+      case 'audit-log': return 'Audit Log';
       case 'users': return 'User Management';
-      case 'settings': return 'System Settings';
+      case 'settings': return 'Settings';
+      case 'legal-notices': return 'Statutory Notices';
       default: return path;
     }
   };
 
+  // Don't show redundant breadcrumb on root dashboard
+  if (pathnames.length === 0 || (pathnames.length === 1 && pathnames[0] === 'dashboard')) {
+    return null;
+  }
+
   return (
-    <nav className="flex items-center space-x-1.5 text-xs text-slate-500 mb-3" aria-label="Breadcrumb">
-      <Link to="/dashboard" className="hover:text-slate-900 flex items-center transition">
-        <Home className="w-3.5 h-3.5 mr-1 text-slate-400" />
+    <nav className="flex items-center space-x-1.5 text-xs text-[#5F6368] mb-5 select-none" aria-label="Breadcrumb">
+      <Link to="/dashboard" className="hover:text-[#6D28D9] flex items-center transition-colors">
+        <Home className="w-3.5 h-3.5 mr-1 text-[#8A8F98]" />
         <span>Home</span>
       </Link>
       {pathnames.map((value, index) => {
@@ -35,13 +43,13 @@ export const Breadcrumbs: React.FC = () => {
 
         return (
           <React.Fragment key={to}>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronRight className="w-3 h-3 text-[#8A8F98]" />
             {isLast ? (
-              <span className="font-semibold text-slate-900 truncate max-w-[200px]" aria-current="page">
+              <span className="font-semibold text-[#1F2328] truncate max-w-[240px]" aria-current="page">
                 {getBreadcrumbTitle(value)}
               </span>
             ) : (
-              <Link to={to} className="hover:text-slate-900 transition truncate max-w-[150px]">
+              <Link to={to} className="hover:text-[#6D28D9] transition-colors truncate max-w-[160px]">
                 {getBreadcrumbTitle(value)}
               </Link>
             )}

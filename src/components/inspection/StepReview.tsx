@@ -48,6 +48,9 @@ export const StepReview: React.FC = () => {
   );
   const [hasDeclared, setHasDeclared] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
+  const [declarationError, setDeclarationError] = useState<string | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [activeDossierSection, setActiveDossierSection] = useState<string>('all');
 
   if (!currentInspection) return null;
@@ -85,7 +88,7 @@ export const StepReview: React.FC = () => {
 
   const handleGenerateReport = () => {
     if (!hasDeclared) {
-      alert('Please check the statutory officer declaration before issuing the official inspection report.');
+      setDeclarationError('Statutory Officer Endorsement (Section 15) is required before issuing the official inspection report.');
       return;
     }
 
@@ -98,10 +101,13 @@ export const StepReview: React.FC = () => {
   };
 
   const handleSaveDraft = () => {
+    setIsSavingDraft(true);
     updateInspectionDetails({ officerNotes });
     finalizeInspection('Draft', officerNotes);
-    alert('Inspection saved as Draft in your officer registry.');
-    navigate('/inspections');
+    setNotificationMessage('Inspection successfully saved as Draft in your officer registry.');
+    setTimeout(() => {
+      navigate('/inspections');
+    }, 800);
   };
 
   const handlePrint = () => {
@@ -176,8 +182,17 @@ export const StepReview: React.FC = () => {
             <span className="text-slate-800 font-medium">{currentInspection.location || 'Retail Commercial Market / Outlet'}</span>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block">Jurisdiction Zone</span>
-            <span className="text-slate-800 font-medium">Zone II, Legal Metrology Department</span>
+            <span className="text-[10px] text-slate-500 uppercase block font-semibold">Jurisdiction</span>
+            <div className="font-bold text-slate-950 leading-tight space-y-0.5 mt-0.5">
+              <div>{currentInspection.jurisdictionDetails?.country || 'India'}</div>
+              <div>{currentInspection.jurisdictionDetails?.state || currentInspection.jurisdiction || 'Delhi'}</div>
+              {currentInspection.jurisdictionDetails?.city && (
+                <div>{currentInspection.jurisdictionDetails.city}</div>
+              )}
+              {currentInspection.jurisdictionDetails?.pinCode && (
+                <div className="font-mono text-slate-800">PIN: {currentInspection.jurisdictionDetails.pinCode}</div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -578,18 +593,33 @@ export const StepReview: React.FC = () => {
           </div>
 
           {/* SECTION 16: STATUTORY ENDORSEMENT CHECKBOX */}
-          <div className="p-3.5 bg-slate-50 border border-slate-300 rounded-md space-y-2">
+          <div className={`p-3.5 rounded-md space-y-2 border transition-colors ${declarationError ? 'bg-red-50/70 border-red-300' : 'bg-slate-50 border-slate-300'}`}>
             <label className="flex items-start space-x-3 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={hasDeclared}
-                onChange={(e) => setHasDeclared(e.target.checked)}
+                onChange={(e) => {
+                  setHasDeclared(e.target.checked);
+                  if (e.target.checked) setDeclarationError(null);
+                }}
                 className="mt-0.5 w-4 h-4 rounded text-[#0f2942] focus:ring-[#0f2942] border-slate-300"
               />
               <span className="text-xs text-slate-800 leading-snug">
                 <strong>Officer Statutory Endorsement (Section 15):</strong> I hereby certify that this physical packaged commodity has been inspected on-site. The multi-surface optical character transcript, dynamic rule applicability checks, and legal metrology findings set forth above are true and complete under the Legal Metrology Act, 2009 and Packaged Commodities Rules, 2011.
               </span>
             </label>
+            {declarationError && (
+              <p className="text-xs text-red-600 font-semibold flex items-center pt-1">
+                <AlertTriangle className="w-3.5 h-3.5 mr-1 shrink-0 text-red-600" />
+                {declarationError}
+              </p>
+            )}
+            {notificationMessage && (
+              <p className="text-xs text-emerald-700 font-semibold flex items-center pt-1">
+                <CheckCircle className="w-3.5 h-3.5 mr-1 shrink-0 text-emerald-600" />
+                {notificationMessage}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -623,6 +653,7 @@ export const StepReview: React.FC = () => {
             type="button"
             variant="outline"
             size="md"
+            isLoading={isSavingDraft}
             leftIcon={<Save className="w-4 h-4" />}
             onClick={handleSaveDraft}
           >

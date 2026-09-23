@@ -116,6 +116,17 @@ def generate_statutory_pdf_report(scan: ScanProcessResponse) -> str:
     infractions = [c for c in scan.compliance_checks if c.status == "FAIL"]
     reviews = [c for c in scan.compliance_checks if c.status == "NEEDS REVIEW"]
     
+    jurisdiction_lines = ["India"]
+    if scan.jurisdiction and scan.jurisdiction.state:
+        jurisdiction_lines = [
+            scan.jurisdiction.country or "India",
+            scan.jurisdiction.state,
+            scan.jurisdiction.city,
+            f"PIN: {scan.jurisdiction.pinCode}" if scan.jurisdiction.pinCode else ""
+        ]
+        jurisdiction_lines = [l for l in jurisdiction_lines if l]
+    jurisdiction_text = "<br/>".join(jurisdiction_lines)
+
     pdata = [
         [
             Paragraph("<b>Case / Docket ID:</b>", cell_style), Paragraph(scan.scan_id, cell_bold_style),
@@ -126,16 +137,16 @@ def generate_statutory_pdf_report(scan: ScanProcessResponse) -> str:
             Paragraph("<b>Compliance Score:</b>", cell_style), Paragraph(f"<b>{scan.compliance_score} / 100</b> ({scan.overall_status})", cell_bold_style)
         ],
         [
-            Paragraph("<b>Product Name:</b>", cell_style), Paragraph(scan.product_info.product_name, cell_bold_style),
+            Paragraph("<b>Jurisdiction:</b>", cell_style), Paragraph(jurisdiction_text, cell_bold_style),
             Paragraph("<b>Commodity Type:</b>", cell_style), Paragraph(scan.product_info.commodity_name, cell_style)
         ],
         [
-            Paragraph("<b>Manufacturer:</b>", cell_style), Paragraph(scan.product_info.manufacturer.full_address or "Not declared", cell_style),
+            Paragraph("<b>Product Name:</b>", cell_style), Paragraph(scan.product_info.product_name, cell_bold_style),
             Paragraph("<b>Statutory Violations:</b>", cell_style), Paragraph(f"<font color='{'#b91c1c' if infractions else '#15803d'}'><b>{len(infractions)} active infractions</b></font>", cell_bold_style)
         ],
         [
-            Paragraph("<b>Surfaces Audited:</b>", cell_style), Paragraph(", ".join(scan.surfaces_processed), cell_style),
-            Paragraph("<b>External Verification:</b>", cell_style), Paragraph(f"<i>{scan.external_verification}</i>", cell_style)
+            Paragraph("<b>Manufacturer:</b>", cell_style), Paragraph(scan.product_info.manufacturer.full_address or "Not declared", cell_style),
+            Paragraph("<b>Surfaces Audited:</b>", cell_style), Paragraph(", ".join(scan.surfaces_processed), cell_style)
         ]
     ]
     
@@ -330,6 +341,16 @@ def generate_statutory_docx_report(scan: ScanProcessResponse) -> str:
     p_details = doc.add_paragraph()
     p_details.add_run(f"Case ID: {scan.scan_id}\n")
     p_details.add_run(f"Inspection Timestamp: {scan.timestamp}\n")
+    jur_lines = ["India"]
+    if scan.jurisdiction and scan.jurisdiction.state:
+        jur_lines = [
+            scan.jurisdiction.country or "India",
+            scan.jurisdiction.state,
+            scan.jurisdiction.city,
+            f"PIN: {scan.jurisdiction.pinCode}" if scan.jurisdiction.pinCode else ""
+        ]
+        jur_lines = [l for l in jur_lines if l]
+    p_details.add_run(f"Jurisdiction:\n" + "\n".join(jur_lines) + "\n")
     p_details.add_run(f"Product Name: {scan.product_info.product_name}\n")
     p_details.add_run(f"Manufacturer: {scan.product_info.manufacturer.full_address}\n")
     p_details.add_run(f"Compliance Score: {scan.compliance_score} / 100 ({scan.overall_status})\n")

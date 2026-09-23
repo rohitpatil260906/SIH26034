@@ -9,7 +9,7 @@ interface StepperProps {
 
 export const Stepper: React.FC<StepperProps> = ({ steps, activeStep, onStepClick }) => {
   return (
-    <div className="w-full bg-white border border-slate-200 rounded-md p-3 mb-6 shadow-2xs">
+    <div className="w-full bg-white border border-[#E5E2DD] rounded-xl p-3.5 mb-6 shadow-2xs">
       <nav aria-label="Progress">
         <ol className="flex items-center justify-between space-x-2 md:space-x-4 overflow-x-auto pb-1">
           {steps.map((stepName, index) => {
@@ -27,21 +27,21 @@ export const Stepper: React.FC<StepperProps> = ({ steps, activeStep, onStepClick
                   type="button"
                   disabled={isUpcoming}
                   onClick={() => onStepClick && onStepClick(stepNumber)}
-                  className={`flex items-center space-x-2 text-left w-full group ${
-                    isUpcoming ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                  className={`flex items-center space-x-2.5 text-left w-full group ${
+                    isUpcoming ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                   }`}
                 >
                   {/* Step circle */}
                   <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
                       isCompleted
-                        ? 'bg-emerald-700 text-white'
+                        ? 'bg-[#16A34A] text-white'
                         : isCurrent
-                        ? 'bg-[#0f2942] text-white ring-2 ring-[#0f2942]/20'
-                        : 'bg-slate-100 text-slate-500 border border-slate-300'
+                        ? 'bg-[#7C3AED] text-white ring-4 ring-[#7C3AED]/15'
+                        : 'bg-[#FAF9F7] text-[#8A8F98] border border-[#E5E2DD]'
                     }`}
                   >
-                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : stepNumber}
+                    {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[2.5]" /> : stepNumber}
                   </span>
 
                   {/* Step text */}
@@ -49,10 +49,10 @@ export const Stepper: React.FC<StepperProps> = ({ steps, activeStep, onStepClick
                     <p
                       className={`text-[10px] font-semibold uppercase tracking-wider ${
                         isCurrent
-                          ? 'text-[#0f2942]'
+                          ? 'text-[#6D28D9]'
                           : isCompleted
-                          ? 'text-emerald-800'
-                          : 'text-slate-400'
+                          ? 'text-[#16A34A]'
+                          : 'text-[#8A8F98]'
                       }`}
                     >
                       Step {stepNumber}
@@ -60,10 +60,10 @@ export const Stepper: React.FC<StepperProps> = ({ steps, activeStep, onStepClick
                     <p
                       className={`text-xs font-medium truncate ${
                         isCurrent
-                          ? 'text-slate-900 font-bold'
+                          ? 'text-[#1F2328] font-bold'
                           : isCompleted
-                          ? 'text-slate-700'
-                          : 'text-slate-400'
+                          ? 'text-[#5F6368]'
+                          : 'text-[#8A8F98]'
                       }`}
                     >
                       {stepName}
@@ -72,7 +72,7 @@ export const Stepper: React.FC<StepperProps> = ({ steps, activeStep, onStepClick
                 </button>
 
                 {index < steps.length - 1 && (
-                  <ChevronRight className="w-4 h-4 text-slate-300 hidden md:block shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-[#E5E2DD] hidden md:block shrink-0" />
                 )}
               </li>
             );

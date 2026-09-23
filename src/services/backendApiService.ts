@@ -177,6 +177,11 @@ export interface SystemStatusResponse {
   external_government_api: string;
 }
 
+function isJsonResponse(res: Response): boolean {
+  const ct = res.headers.get('content-type');
+  return !!ct && ct.includes('application/json');
+}
+
 /**
  * Checks image quality against the 12 automated metrics
  */
@@ -187,7 +192,7 @@ export async function checkImageQualityApi(imageBase64: string): Promise<Quality
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: imageBase64 })
     });
-    if (!res.ok) return null;
+    if (!res.ok || !isJsonResponse(res)) return null;
     return await res.json();
   } catch (err) {
     console.warn('Quality API error:', err);
@@ -205,7 +210,7 @@ export async function getPreprocessingVariantsApi(imageBase64: string): Promise<
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: imageBase64 })
     });
-    if (!res.ok) return [];
+    if (!res.ok || !isJsonResponse(res)) return [];
     return await res.json();
   } catch (err) {
     console.warn('Variants API error:', err);
@@ -227,7 +232,7 @@ export async function detectPackagingRegionsApi(imageBase64: string): Promise<{
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: imageBase64 })
     });
-    if (!res.ok) return null;
+    if (!res.ok || !isJsonResponse(res)) return null;
     return await res.json();
   } catch (err) {
     console.warn('Region detection API error:', err);
@@ -247,9 +252,9 @@ export async function processScanApi(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ images, options })
   });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(errData.detail || `Pipeline execution failed: HTTP ${res.status}`);
+  if (!res.ok || !isJsonResponse(res)) {
+    const errData = isJsonResponse(res) ? await res.json().catch(() => ({})) : null;
+    throw new Error(errData?.detail || `Backend processing unavailable: HTTP ${res.status}`);
   }
   return await res.json();
 }
@@ -260,7 +265,7 @@ export async function processScanApi(
 export async function getEvaluationBenchmarkApi(): Promise<BenchmarkResponse | null> {
   try {
     const res = await fetch('/api/evaluation/benchmark');
-    if (!res.ok) return null;
+    if (!res.ok || !isJsonResponse(res)) return null;
     return await res.json();
   } catch (err) {
     console.warn('Benchmark API error:', err);
@@ -274,7 +279,7 @@ export async function getEvaluationBenchmarkApi(): Promise<BenchmarkResponse | n
 export async function getSystemStatusApi(): Promise<SystemStatusResponse | null> {
   try {
     const res = await fetch('/api/system/status');
-    if (!res.ok) return null;
+    if (!res.ok || !isJsonResponse(res)) return null;
     return await res.json();
   } catch (err) {
     console.warn('System status API error:', err);
@@ -293,3 +298,70 @@ export function getDocxReportUrl(scanId: string): string {
 export function getLabelMeJsonUrl(scanId: string): string {
   return `/api/scan/${encodeURIComponent(scanId)}/labelme`;
 }
+
+export async function getScansListApi(limit: number = 50, offset: number = 0): Promise<any[]> {
+  try {
+    const res = await fetch(`/api/scans?limit=${limit}&offset=${offset}`);
+    if (!res.ok || !isJsonResponse(res)) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (err) {
+    console.warn('Get scans list error:', err);
+    return [];
+  }
+}
+
+export async function getReportsListApi(limit: number = 50, offset: number = 0): Promise<any[]> {
+  try {
+    const res = await fetch(`/api/reports?limit=${limit}&offset=${offset}`);
+    if (!res.ok || !isJsonResponse(res)) return [];
+    const data = await res.json();
+    return data.data || [];
+  } catch (err) {
+    console.warn('Get reports list error:', err);
+    return [];
+  }
+}
+
+export async function saveReportApi(docketData: any): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const res = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(docketData)
+    });
+    if (!res.ok || !isJsonResponse(res)) {
+      const err = isJsonResponse(res) ? await res.json().catch(() => ({ detail: res.statusText })) : { detail: res.statusText };
+      throw new Error(err.detail || 'Failed to save report to server');
+    }
+    return await res.json();
+  } catch (err: any) {
+    console.warn('Save report API error:', err);
+    return { success: false, message: err.message };
+  }
+}
+
+export async function deleteReportApi(scanId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/reports/${encodeURIComponent(scanId)}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Delete report API error:', err);
+    return false;
+  }
+}
+
+export async function getDashboardStatsApi(): Promise<any | null> {
+  try {
+    const res = await fetch('/api/dashboard/stats');
+    if (!res.ok || !isJsonResponse(res)) return null;
+    const json = await res.json();
+    return json.data;
+  } catch (err) {
+    console.warn('Get dashboard stats API error:', err);
+    return null;
+  }
+}
+

@@ -6,13 +6,11 @@ import {
   X,
   Check,
   RefreshCw,
-  AlertCircle,
   Upload,
-  Sparkles,
   Timer,
-  Sliders,
   ScanLine,
-  Maximize2
+  Lock,
+  CameraOff
 } from 'lucide-react';
 import { SurfaceType } from '../../types';
 
@@ -33,8 +31,17 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('user'); // Default to 'user' for laptop webcams compatibility
+  const isMobileDevice = typeof window !== 'undefined' && (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
+  );
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>(() => isMobileDevice ? 'environment' : 'user');
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [errorTitle, setErrorTitle] = useState<string | null>(null);
+  const [exactErrorDetails, setExactErrorDetails] = useState<string | null>(null);
+  const [permissionQueryState, setPermissionQueryState] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'permission' | 'not_found' | 'in_use' | 'security' | 'constraints' | 'unsupported' | 'policy' | 'unknown' | null>(null);
+  const [isPermissionDenied, setIsPermissionDenied] = useState<boolean>(false);
   const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(false);
   const [selectedSurface, setSelectedSurface] = useState<SurfaceType>(surface || defaultSurface);
   const [isShutterActive, setIsShutterActive] = useState<boolean>(false);
@@ -47,16 +54,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const [useTimer, setUseTimer] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  // Live Optical Simulator (when no camera or permission denied)
-  const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(false);
-  const [simulatorSample, setSimulatorSample] = useState<'mustard' | 'facewash' | 'lakme'>('lakme');
-
+  // Persistent reference to stream for leak-free track cleanup across renders and closures
+  const streamRef = useRef<MediaStream | null>(null);
+  const activeRequestIdRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const simulatorCanvasRef = useRef<HTMLCanvasElement>(null);
   const countdownTimerRef = useRef<any>(null);
-  const animationFrameRef = useRef<number | null>(null);
 
   // Audio synthesizer for camera shutter click
   const playShutterSound = useCallback(() => {
@@ -109,140 +113,302 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   // Enumerate camera devices
   const refreshDevices = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     try {
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
       setVideoDevices(videoInputs);
-      if (videoInputs.length > 0 && !selectedDeviceId) {
-        setSelectedDeviceId(videoInputs[0].deviceId);
-      }
+      setSelectedDeviceId(prev => {
+        if (!prev && videoInputs.length > 0 && videoInputs[0].deviceId) {
+          return videoInputs[0].deviceId;
+        }
+        return prev;
+      });
     } catch (e) {
-      console.warn('Could not enumerate video devices:', e);
+      console.warn('[CameraCaptureModal] Could not enumerate video devices:', e);
     }
-  }, [selectedDeviceId]);
+  }, []);
 
-  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
-
-  // Progressive camera initialization with seamless optical fallback
-  const startCamera = useCallback(async (deviceId?: string, mode?: 'environment' | 'user') => {
-    setIsLoadingCamera(true);
-    setCameraError(null);
-    setCameraNotice(null);
-
-    // Stop current stream if running
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      setStream(null);
-    }
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      console.warn('Camera API not supported; falling back to optical simulator');
-      setCameraNotice('Webcam API is not supported in this environment. Switched to Live Optical Camera Feed — ready to shoot!');
-      setIsSimulatorActive(true);
-      setIsLoadingCamera(false);
-      return;
-    }
-
-    const preferredMode = mode || facingMode;
-    let acquiredStream: MediaStream | null = null;
-
-    // 1. If explicit device ID selected
-    if (deviceId) {
-      try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: { exact: deviceId },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
-      } catch {
-        try {
-          acquiredStream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: deviceId } },
-            audio: false
-          });
-        } catch (e) {
-          console.warn('Selected camera device failed, falling back to default:', e);
-        }
+  // Callback ref to attach stream to video element whenever it mounts
+  const attachVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node && streamRef.current) {
+      if (node.srcObject !== streamRef.current) {
+        node.srcObject = streamRef.current;
+      }
+      node.muted = true;
+      node.playsInline = true;
+      node.setAttribute('playsinline', 'true');
+      node.setAttribute('autoplay', 'true');
+      node.setAttribute('muted', 'true');
+      const playPromise = node.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => console.warn('[CameraCaptureModal] Callback ref play warning:', e));
       }
     }
+  }, []);
 
-    // 2. Try standard 720p
-    if (!acquiredStream) {
-      try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: preferredMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
-      } catch (err1) {
-        console.warn('Ideal facingMode + 720p failed, trying basic video...', err1);
-      }
-    }
-
-    // 3. Try any available video constraint (fallback for laptop webcams)
-    if (!acquiredStream) {
-      try {
-        acquiredStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false
-        });
-      } catch (err2: any) {
-        console.warn('Hardware camera acquisition failed, activating live optical simulator:', err2);
-        let notice = 'No physical webcam detected. Live Optical Camera Feed active with real statutory labels — ready to shoot!';
-        if (err2.name === 'NotAllowedError' || err2.name === 'PermissionDeniedError') {
-          notice = 'Webcam permission blocked by browser. Using Live Optical Camera Feed (click address bar lock icon to grant camera). Ready to shoot!';
-        }
-        setCameraNotice(notice);
-        setIsSimulatorActive(true);
-        setIsLoadingCamera(false);
-        return;
-      }
-    }
-
-    if (acquiredStream) {
-      setStream(acquiredStream);
-      setIsSimulatorActive(false);
-      setIsLoadingCamera(false);
-      setCameraError(null);
-      refreshDevices();
-    }
-  }, [facingMode, stream, refreshDevices]);
-
+  // Guaranteed clean camera track shutdown
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+    activeRequestIdRef.current++;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('[CameraCaptureModal] Error stopping streamRef track:', e);
+        }
+      });
+      streamRef.current = null;
+    }
+    setStream(null);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
       countdownTimerRef.current = null;
     }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
     setCountdown(null);
-  }, [stream]);
+  }, []);
+
+  // Start device camera via navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+  const startCamera = useCallback(async (deviceId?: string, targetFacingMode?: 'environment' | 'user') => {
+    const currentRequestId = ++activeRequestIdRef.current;
+    const effectiveFacingMode = targetFacingMode || facingMode;
+    setIsLoadingCamera(true);
+    setCameraError(null);
+    setErrorTitle(null);
+    setExactErrorDetails(null);
+    setErrorType(null);
+    setIsPermissionDenied(false);
+
+    // Passively query browser Permissions API for state diagnostics without blocking or destroying user gesture
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'camera' as any })
+        .then(pStatus => {
+          setPermissionQueryState(pStatus.state);
+          pStatus.onchange = () => {
+            setPermissionQueryState(pStatus.state);
+          };
+        })
+        .catch(() => {
+          // Permissions query not supported for camera in some browsers (e.g. Firefox, Safari)
+        });
+    }
+
+    // Verify secure context (HTTPS or localhost)
+    const isSecure = typeof window !== 'undefined' && (
+      window.isSecureContext ||
+      window.location.protocol === 'https:' ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1'
+    );
+
+    if (!isSecure) {
+      setIsLoadingCamera(false);
+      setErrorType('security');
+      setErrorTitle('Secure HTTPS Connection Required');
+      setCameraError('Camera access is restricted to secure origins (HTTPS). Please ensure you are accessing the deployed application over https://.');
+      setExactErrorDetails(`Current origin is not secure: ${typeof window !== 'undefined' ? window.location.protocol : ''}//${typeof window !== 'undefined' ? window.location.host : ''}`);
+      return;
+    }
+
+    // Verify browser mediaDevices support
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      setIsLoadingCamera(false);
+      setErrorType('unsupported');
+      setErrorTitle('Camera API Not Supported');
+      setCameraError('The Camera API (navigator.mediaDevices.getUserMedia) is not supported by your current browser or Webview.');
+      setExactErrorDetails(`navigator.mediaDevices: ${typeof navigator?.mediaDevices}, isSecureContext: ${typeof window !== 'undefined' ? window.isSecureContext : false}`);
+      return;
+    }
+
+    try {
+      let acquiredStream: MediaStream | null = null;
+
+      // 1. Try with exact deviceId if selected by user
+      if (deviceId && deviceId.trim()) {
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: deviceId } },
+            audio: false
+          });
+        } catch (deviceErr) {
+          console.warn('[CameraCaptureModal] Selected deviceId failed, falling back to basic video constraint:', deviceErr);
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
+      } else {
+        // 2. Standard native browser camera request with ideal facing mode
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: effectiveFacingMode ? { facingMode: { ideal: effectiveFacingMode } } : true,
+            audio: false
+          });
+        } catch (facingErr) {
+          console.warn('[CameraCaptureModal] Ideal facingMode failed, falling back to standard video constraint:', facingErr);
+          acquiredStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
+      }
+
+      // Check if this request was superseded while waiting for user interaction
+      if (activeRequestIdRef.current !== currentRequestId) {
+        acquiredStream.getTracks().forEach(t => {
+          try { t.stop(); } catch {}
+        });
+        return;
+      }
+
+      // Stop previous stream tracks cleanly now that new stream is ready
+      if (streamRef.current && streamRef.current !== acquiredStream) {
+        streamRef.current.getTracks().forEach(t => {
+          try { t.stop(); } catch {}
+        });
+      }
+
+      streamRef.current = acquiredStream;
+      setStream(acquiredStream);
+      setIsLoadingCamera(false);
+      setCameraError(null);
+      setErrorTitle(null);
+      setExactErrorDetails(null);
+      setErrorType(null);
+      setIsPermissionDenied(false);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = acquiredStream;
+        videoRef.current.muted = true;
+        videoRef.current.playsInline = true;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('autoplay', 'true');
+        videoRef.current.setAttribute('muted', 'true');
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(playErr => {
+            console.warn('[CameraCaptureModal] Video play promise caught:', playErr);
+          });
+        }
+      }
+
+      refreshDevices();
+    } catch (error: any) {
+      if (activeRequestIdRef.current !== currentRequestId) return;
+      setIsLoadingCamera(false);
+
+      const errName: string = error?.name || '';
+      const errMsg: string = error?.message || '';
+      console.error("Camera error:", error);
+      console.error("Camera error name:", error?.name);
+      console.error("Camera error message:", error?.message);
+
+      const isPolicyBlocked =
+        errMsg.toLowerCase().includes('permissions policy') ||
+        errMsg.toLowerCase().includes('feature policy') ||
+        errMsg.toLowerCase().includes('disallowed');
+
+      const isSystemBlocked =
+        errMsg.toLowerCase().includes('system') ||
+        errMsg.toLowerCase().includes('operating system');
+
+      const technicalSummary = `Error: [${errName || 'Error'}] ${errMsg || 'No error message provided'} | Origin: ${typeof window !== 'undefined' ? window.location.origin : ''} | Protocol: ${typeof window !== 'undefined' ? window.location.protocol : ''} | SecureContext: ${typeof window !== 'undefined' ? window.isSecureContext : false}`;
+      setExactErrorDetails(technicalSummary);
+
+      if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+        setIsPermissionDenied(true);
+        if (isPolicyBlocked) {
+          setErrorType('policy');
+          setErrorTitle('Camera Blocked by Permissions Policy');
+          setCameraError(
+            'Camera access is disallowed by browser Permissions Policy. If this application is running inside a preview iframe or Vercel toolbar, please open the direct URL in a new browser tab.'
+          );
+        } else if (isSystemBlocked) {
+          setErrorType('permission');
+          setErrorTitle('Camera Blocked by Operating System');
+          setCameraError(
+            'Your operating system (Windows/macOS) is blocking camera access for your browser. Please check OS Privacy & Security > Camera permissions.'
+          );
+        } else {
+          setErrorType('permission');
+          setErrorTitle('Camera Permission Denied');
+          setCameraError(
+            'Camera permission was not granted by your browser. Please click the camera/lock icon in your browser address bar to allow camera access, and click "Retry Camera".'
+          );
+        }
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        setIsPermissionDenied(false);
+        setErrorType('not_found');
+        setErrorTitle('No Camera Detected');
+        setCameraError(
+          'No camera device was detected on your system. Please connect a webcam or enable your device camera and click "Retry Camera".'
+        );
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+        setIsPermissionDenied(false);
+        setErrorType('in_use');
+        setErrorTitle('Camera Already In Use');
+        setCameraError(
+          'The camera is currently locked or in use by another application (Zoom, Teams, Meet, etc.) or another browser tab. Close other apps using the camera and click "Retry Camera".'
+        );
+      } else if (errName === 'OverconstrainedError') {
+        setIsPermissionDenied(false);
+        setErrorType('constraints');
+        setErrorTitle('Camera Constraints Error');
+        setCameraError(
+          `The requested camera constraints are not supported by your hardware (${(error as any)?.constraint || 'unsupported'}). Click "Retry Camera" to reset.`
+        );
+      } else if (errName === 'SecurityError') {
+        setIsPermissionDenied(false);
+        setErrorType('security');
+        setErrorTitle('Browser Security Restriction');
+        setCameraError(
+          'Camera access was restricted by browser security policies. Ensure the application is accessed over HTTPS directly.'
+        );
+      } else if (errName === 'TypeError') {
+        setIsPermissionDenied(false);
+        setErrorType('constraints');
+        setErrorTitle('Camera Configuration Error');
+        setCameraError(
+          'Invalid camera constraints were requested. Click "Retry Camera" to reset to standard constraints.'
+        );
+      } else if (errName === 'AbortError') {
+        setIsPermissionDenied(false);
+        setErrorType('unknown');
+        setErrorTitle('Camera Operation Aborted');
+        setCameraError(
+          'The camera operation was interrupted or aborted by the browser. Click "Retry Camera" to try again.'
+        );
+      } else {
+        setIsPermissionDenied(false);
+        setErrorType('unknown');
+        setErrorTitle('Camera Unavailable');
+        setCameraError(
+          errMsg || 'An unexpected error occurred while requesting device camera access. Check browser console for details.'
+        );
+      }
+    }
+  }, [facingMode, refreshDevices]);
 
   // Synchronize stream with video element
   useEffect(() => {
-    if (videoRef.current && stream && !capturedImage && !isSimulatorActive) {
-      videoRef.current.srcObject = stream;
+    if (videoRef.current && stream && !capturedImage) {
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
+      videoRef.current.muted = true;
+      videoRef.current.playsInline = true;
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch(err => {
-          console.warn('Video autoplay aborted:', err);
+          console.warn('[CameraCaptureModal] Video autoplay aborted:', err);
         });
       }
     }
-  }, [stream, capturedImage, isSimulatorActive]);
+  }, [stream, capturedImage]);
 
   // Handle open / close lifecycle
   useEffect(() => {
@@ -250,203 +416,26 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       stopCamera();
       setCapturedImage(null);
       setCameraError(null);
-      setIsSimulatorActive(false);
+      setErrorTitle(null);
+      setExactErrorDetails(null);
+      setErrorType(null);
+      setIsPermissionDenied(false);
       return;
     }
 
-    // Reset surface default
-    setSelectedSurface(defaultSurface);
-    // Start camera stream immediately upon opening
-    startCamera(selectedDeviceId || undefined, facingMode);
+    setSelectedSurface(surface || defaultSurface);
+    startCamera(selectedDeviceId || undefined);
 
     return () => {
       stopCamera();
     };
   }, [isOpen]);
 
-  // Interactive Live Optical Simulator Canvas loop
-  useEffect(() => {
-    if (!isSimulatorActive || capturedImage || !isOpen) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      return;
-    }
-
-    const canvas = simulatorCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let scanLineY = 50;
-    let scanDirection = 2;
-
-    const renderSimulator = () => {
-      canvas.width = 800;
-      canvas.height = 600;
-
-      // Background backdrop
-      ctx.fillStyle = '#090d16';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Package Pouch Body
-      const pouchX = 220;
-      const pouchY = 60;
-      const pouchW = 360;
-      const pouchH = 480;
-
-      const grad = ctx.createLinearGradient(pouchX, pouchY, pouchX + pouchW, pouchY + pouchH);
-      if (simulatorSample === 'lakme') {
-        grad.addColorStop(0, '#fef3c7');
-        grad.addColorStop(0.3, '#fde68a');
-        grad.addColorStop(0.7, '#f59e0b');
-        grad.addColorStop(1, '#ea580c');
-      } else if (simulatorSample === 'mustard') {
-        grad.addColorStop(0, '#fef08a');
-        grad.addColorStop(0.5, '#fde047');
-        grad.addColorStop(1, '#eab308');
-      } else {
-        grad.addColorStop(0, '#dcfce7');
-        grad.addColorStop(0.5, '#86efac');
-        grad.addColorStop(1, '#22c55e');
-      }
-
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.roundRect(pouchX, pouchY, pouchW, pouchH, 16);
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = simulatorSample === 'lakme' ? '#b45309' : simulatorSample === 'mustard' ? '#ca8a04' : '#15803d';
-      ctx.stroke();
-
-      // Top statutory header
-      ctx.fillStyle = '#0f2942';
-      ctx.fillRect(pouchX + 20, pouchY + 20, pouchW - 40, 50);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'LAKMÉ 9 TO 5 SUN EXPERT'
-          : simulatorSample === 'mustard'
-          ? 'HERITAGE SHUDDH MUSTARD OIL'
-          : 'NOURISHCARE NEEM FACE WASH',
-        pouchX + pouchW / 2,
-        pouchY + 52
-      );
-
-      // Declarations
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 17px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'NET WT.: 56 g (5% NIA-C AQUA GEL)'
-          : simulatorSample === 'mustard'
-          ? 'NET QUANTITY: 1 LITRE'
-          : 'NET VOLUME: 150 ML',
-        pouchX + 30,
-        pouchY + 115
-      );
-
-      ctx.fillStyle = simulatorSample === 'lakme' ? '#0f172a' : '#b91c1c';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'MRP ₹ 499/- (INCL. OF ALL TAXES)'
-          : simulatorSample === 'mustard'
-          ? 'MRP ₹ 165.00'
-          : 'MRP ₹ 149.00 (incl. of all taxes)',
-        pouchX + 30,
-        pouchY + 150
-      );
-
-      if (simulatorSample === 'lakme') {
-        ctx.fillStyle = '#0369a1';
-        ctx.font = 'bold 15px monospace';
-        ctx.fillText('USP ₹ 8.91/g (STATUTORY RULE 6(2))', pouchX + 30, pouchY + 178);
-      }
-
-      ctx.fillStyle = '#334155';
-      ctx.font = '12px sans-serif';
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'Mfg: (AY) Aero Care LLP, DNH 396 235 for HUL'
-          : simulatorSample === 'mustard'
-          ? 'Mfg: Heritage Agro Oil Mills, Alwar, RJ - 301030'
-          : 'Mfg: NourishCare Personal, Solan, HP - 173205',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 208 : 210)
-      );
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? '# MFD: 02/26 B005 | @ USE BEFORE: 01/28'
-          : 'Batch No: LM-2026/08-B | Date: 08/2026',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 232 : 235)
-      );
-      ctx.fillText(
-        simulatorSample === 'lakme'
-          ? 'Levercare Toll-Free: 1800-10-22-221 | lever.care@unilever.com'
-          : 'Consumer Care: 1800-200-9844 | care@gov.in',
-        pouchX + 30,
-        pouchY + (simulatorSample === 'lakme' ? 256 : 260)
-      );
-
-      // Barcode simulation
-      ctx.fillStyle = '#000000';
-      for (let i = 0; i < 40; i++) {
-        const w = (i % 3 === 0) ? 4 : (i % 2 === 0) ? 2 : 1;
-        ctx.fillRect(pouchX + 30 + (i * 7), pouchY + 295, w, 60);
-      }
-      ctx.font = '12px monospace';
-      ctx.fillText(
-        simulatorSample === 'lakme' ? '8 909106 031241' : '8 901234 567890',
-        pouchX + 90,
-        pouchY + 375
-      );
-
-      // Moving laser scan line
-      scanLineY += scanDirection;
-      if (scanLineY > pouchY + pouchH - 20 || scanLineY < pouchY + 20) {
-        scanDirection = -scanDirection;
-      }
-
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = '#34d399';
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.moveTo(pouchX + 10, scanLineY);
-      ctx.lineTo(pouchX + pouchW - 10, scanLineY);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      animationFrameRef.current = requestAnimationFrame(renderSimulator);
-    };
-
-    renderSimulator();
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [isSimulatorActive, simulatorSample, capturedImage, isOpen]);
-
-  // Execute snapshot capture
+  // Execute snapshot capture directly from webcam stream
   const performActualCapture = () => {
     playShutterSound();
     setIsShutterActive(true);
     setTimeout(() => setIsShutterActive(false), 220);
-
-    if (isSimulatorActive && simulatorCanvasRef.current) {
-      const canvas = simulatorCanvasRef.current;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      setCapturedImage(dataUrl);
-      return;
-    }
 
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -491,9 +480,9 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     }
   };
 
-  // Keyboard shortcut: Spacebar or Enter triggers photo shoot
+  // Keyboard shortcut: Spacebar triggers photo shoot
   useEffect(() => {
-    if (!isOpen || capturedImage) return;
+    if (!isOpen || capturedImage || cameraError || isLoadingCamera) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && e.target === document.body) {
@@ -504,19 +493,16 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, capturedImage, useTimer, isSimulatorActive]);
+  }, [isOpen, capturedImage, cameraError, isLoadingCamera, useTimer]);
 
   const handleRetake = () => {
     setCapturedImage(null);
-    if (isSimulatorActive) {
-      // Simulator continues
-    } else {
-      startCamera(selectedDeviceId || undefined, facingMode);
-    }
+    startCamera(selectedDeviceId || undefined);
   };
 
   const handleConfirmPhoto = () => {
     if (capturedImage) {
+      stopCamera();
       onCapture(capturedImage, selectedSurface);
       onClose();
     }
@@ -539,6 +525,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const handleSwitchLens = () => {
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
+    setSelectedDeviceId('');
+    stopCamera();
     startCamera(undefined, nextMode);
   };
 
@@ -556,63 +544,30 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-bold text-white tracking-wide">
-                  Optical Product Scanner & Live Camera
+                  Live Camera Scanner
                 </h3>
-                <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold">
-                  LIVE READY
-                </span>
+                {stream && !cameraError && (
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.2 rounded font-mono font-semibold">
+                    LIVE
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400">
-                Legal Metrology Packaging Inspection • High-Definition Optical Frame Capture
+                Legal Metrology Packaging Inspection • Live Webcam Feed
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Quick Camera Mode Switcher */}
-            <div className="hidden sm:flex items-center space-x-1 bg-slate-800 p-1 rounded-lg border border-slate-700 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimulatorActive(false);
-                  startCamera();
-                }}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                  !isSimulatorActive
-                    ? 'bg-[#0f2942] text-amber-300 font-bold border border-amber-400/40 shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Use physical webcam/camera connected to this machine"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>Webcam</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  stopCamera();
-                  setIsSimulatorActive(true);
-                }}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                  isSimulatorActive
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Use Live Optical Camera Feed with calibrated packaging"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Optical Feed</span>
-              </button>
-            </div>
-
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              title="Close Camera"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              stopCamera();
+              onClose();
+            }}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            title="Close Camera"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Viewport Area */}
@@ -639,64 +594,112 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <div className="relative w-full h-full flex flex-col items-center justify-center p-4 bg-slate-950">
               <img
                 src={capturedImage}
-                alt="Captured Commodity Label"
+                alt="Captured Package Label"
                 className="max-h-[360px] w-auto object-contain rounded-lg border-2 border-emerald-500/50 shadow-2xl"
               />
               <div className="absolute top-4 left-4 bg-emerald-900/90 border border-emerald-500 text-emerald-200 px-3 py-1 rounded-md text-xs font-semibold flex items-center space-x-2 shadow-lg">
                 <Check className="w-4 h-4 text-emerald-300" />
-                <span>Photo Captured Successfully • Ready for OCR & Rule Engine</span>
+                <span>Photo Captured Successfully • Ready for Inspection</span>
               </div>
             </div>
-          ) : isSimulatorActive ? (
-            /* Case 2: Live Interactive Optical Simulator */
-            <div className="relative w-full h-full flex items-center justify-center">
-              <canvas
-                ref={simulatorCanvasRef}
-                className="w-full h-full object-contain max-h-[440px]"
-              />
-              <div className="absolute top-3 left-3 bg-amber-900/80 border border-amber-600 text-amber-200 px-2.5 py-0.5 rounded text-[11px] font-mono flex items-center space-x-1.5 shadow z-10">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Live Optical Packaging Feed</span>
+          ) : cameraError ? (
+            /* Case 2: Camera Permission / Device Error Screen */
+            <div className="p-6 sm:p-8 text-center space-y-4 max-w-lg mx-auto w-full">
+              <div
+                className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
+                  errorType === 'permission' || errorType === 'policy'
+                    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
+                    : 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
+                }`}
+              >
+                {errorType === 'permission' || errorType === 'policy' ? (
+                  <Lock className="w-7 h-7" />
+                ) : (
+                  <CameraOff className="w-7 h-7" />
+                )}
               </div>
-              {cameraNotice && (
-                <div className="absolute top-10 left-3 right-3 z-10 bg-slate-900/90 border border-amber-500/60 text-amber-200 px-3 py-1.5 rounded text-xs font-sans shadow-lg flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="text-[11px]">{cameraNotice}</span>
+              <div>
+                <h4 className="text-base font-bold text-white">
+                  {errorTitle || 'Camera Unavailable'}
+                </h4>
+                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                  {cameraError}
+                </p>
+
+                {/* Specific Actionable Guidance */}
+                {(errorType === 'permission' || errorType === 'policy') && (
+                  <p className="text-[11px] text-amber-300/90 mt-2.5 bg-amber-950/40 border border-amber-800/40 rounded p-2.5 leading-normal text-left">
+                    {errorType === 'policy'
+                      ? '⚠️ Permissions Policy Notice: If testing inside a Vercel preview toolbar or iframe, camera access may be restricted by the embedding parent frame. Please open the deployed Vercel URL directly in a full browser tab.'
+                      : '💡 To grant permission: Click the camera or lock/tune icon in your browser address bar (top-left or top-right of URL), select "Allow" for Camera, and click "Retry Camera" below.'}
+                  </p>
+                )}
+
+                {/* Visible Exact Browser Diagnostic Box */}
+                {exactErrorDetails && (
+                  <div className="mt-3 p-3 bg-slate-950/90 border border-slate-800 rounded text-left font-mono">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 border-b border-slate-800/80 pb-1 mb-1.5">
+                      <span>EXACT BROWSER DIAGNOSTIC</span>
+                      <span className={`text-[10px] uppercase font-bold px-1 rounded ${
+                        errorType === 'permission' || errorType === 'policy'
+                          ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                          : 'bg-rose-950 text-rose-300 border border-rose-800/60'
+                      }`}>
+                        {errorType || 'ERROR'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 break-all leading-relaxed">
+                      {exactErrorDetails}
+                    </p>
+                    {permissionQueryState && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Permissions API State: <span className="text-amber-400 font-bold">{permissionQueryState}</span>
+                      </p>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSimulatorActive(false);
-                      startCamera();
-                    }}
-                    className="ml-2 px-2 py-0.5 bg-amber-500 text-slate-950 font-bold rounded text-[10px] hover:bg-amber-400 shrink-0 cursor-pointer"
-                  >
-                    Try Webcam
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
+                <Button
+                  variant="primary"
+                  size="md"
+                  leftIcon={<RefreshCw className="w-4 h-4" />}
+                  onClick={() => startCamera(selectedDeviceId || undefined)}
+                >
+                  Retry Camera
+                </Button>
+                <Button
+                  variant="outline"
+                  size="md"
+                  className="text-slate-200 border-slate-700 hover:bg-slate-800"
+                  leftIcon={<Upload className="w-4 h-4" />}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Upload Photo Instead
+                </Button>
+              </div>
             </div>
-          ) : !cameraError ? (
-            /* Case 3: Real Hardware Camera Feed */
+          ) : (
+            /* Case 3: Real Hardware Camera Live Feed */
             <div className="relative w-full h-full flex items-center justify-center">
               {isLoadingCamera && (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 space-y-3">
                   <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
                   <p className="text-xs text-slate-300 font-medium">
-                    Initializing Optical Sensor & Camera Stream...
+                    Connecting to Camera & Opening Live Stream...
                   </p>
                 </div>
               )}
 
               <video
-                ref={videoRef}
+                ref={attachVideoRef}
                 autoPlay
                 playsInline
                 muted
                 onLoadedMetadata={() => {
                   if (videoRef.current) {
-                    videoRef.current.play().catch(() => {});
+                    videoRef.current.play().catch(err => console.warn('Video autoplay aborted:', err));
                   }
                 }}
                 className="w-full h-full object-contain max-h-[440px]"
@@ -719,78 +722,37 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 </div>
 
                 <div className="flex justify-between items-end text-[10px] font-mono text-emerald-400/90">
-                  <span>[ OPTICAL 300 DPI ]</span>
+                  <span>[ LIVE OPTICAL FEED ]</span>
                   <span>[ PRESS SPACEBAR OR CLICK SHOOT ]</span>
                 </div>
-              </div>
-            </div>
-          ) : (
-            /* Case 4: Camera Notice / Permission / Device Error Screen */
-            <div className="p-6 text-center space-y-4 max-w-md">
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-white">Live Camera Notice</h4>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  {cameraError}
-                </p>
-              </div>
-
-              <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-                  onClick={() => startCamera()}
-                >
-                  Retry Camera
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-                  onClick={() => setIsSimulatorActive(true)}
-                >
-                  Use Optical Simulator
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-slate-200 border-slate-700"
-                  leftIcon={<Upload className="w-3.5 h-3.5" />}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Upload File
-                </Button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Surface Selection & Quick Bar */}
+        {/* Surface Selection & Hardware Bar */}
         <div className="px-4 py-2.5 bg-slate-850 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
           <div className="flex items-center space-x-2 text-slate-300">
             <span className="font-semibold text-slate-200">Packaging Surface:</span>
             <div className="flex items-center space-x-1.5 overflow-x-auto">
-              {(['Front (PDP)', 'Back Panel', 'Side Panel', 'Top/Bottom'] as SurfaceType[]).map((surface) => (
+              {(['Front (PDP)', 'Back Panel', 'Side Panel', 'Top/Bottom'] as SurfaceType[]).map((surf) => (
                 <button
-                  key={surface}
+                  key={surf}
                   type="button"
-                  onClick={() => setSelectedSurface(surface)}
+                  onClick={() => setSelectedSurface(surf)}
                   className={`px-2.5 py-1 rounded text-xs transition cursor-pointer ${
-                    selectedSurface === surface
+                    selectedSurface === surf
                       ? 'bg-emerald-600 text-white font-bold shadow-xs'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  {surface}
+                  {surf}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Quick Hardware Controls */}
+          {/* Hardware Controls */}
           {!capturedImage && !cameraError && (
             <div className="flex items-center space-x-2">
               {/* Device Selector (if multiple webcams available) */}
@@ -837,46 +799,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               </button>
             </div>
           )}
-
-          {/* Simulator sample switcher */}
-          {isSimulatorActive && !capturedImage && (
-            <div className="flex items-center space-x-2">
-              <span className="text-slate-400">Sample:</span>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('lakme')}
-                className={`px-2.5 py-1 rounded text-xs transition font-semibold cursor-pointer ${
-                  simulatorSample === 'lakme' ? 'bg-amber-500 text-slate-950 font-bold shadow-xs' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                ✨ Lakmé Sunscreen (56g)
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('mustard')}
-                className={`px-2 py-0.5 rounded text-xs ${
-                  simulatorSample === 'mustard' ? 'bg-amber-600 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Mustard Oil
-              </button>
-              <button
-                type="button"
-                onClick={() => setSimulatorSample('facewash')}
-                className={`px-2 py-0.5 rounded text-xs ${
-                  simulatorSample === 'facewash' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-800 text-slate-300'
-                }`}
-              >
-                Neem Face Wash
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Action Controls Footer */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 bg-slate-900 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Left Action: Upload File Alternative */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-center sm:justify-start space-x-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -887,45 +815,22 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             <Button
               variant="outline"
               size="sm"
-              className="text-slate-300 border-slate-700 hover:bg-slate-800"
+              className="text-slate-300 border-slate-700 hover:bg-slate-800 w-full sm:w-auto"
               leftIcon={<Upload className="w-3.5 h-3.5" />}
               onClick={() => fileInputRef.current?.click()}
             >
               Upload Photo Instead
             </Button>
-
-            {!isSimulatorActive && !capturedImage && (
-              <button
-                type="button"
-                onClick={() => setIsSimulatorActive(true)}
-                className="text-xs text-slate-400 hover:text-slate-200 underline hidden sm:inline"
-              >
-                Test with Optical Simulator
-              </button>
-            )}
-
-            {isSimulatorActive && !capturedImage && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSimulatorActive(false);
-                  startCamera();
-                }}
-                className="text-xs text-emerald-400 hover:text-emerald-300 underline"
-              >
-                Back to Real Webcam
-              </button>
-            )}
           </div>
 
           {/* Right Action: Shoot Photo or Review Confirm */}
-          <div className="flex items-center space-x-2.5">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center sm:justify-end gap-2 sm:space-x-2.5">
             {capturedImage ? (
               <>
                 <Button
                   variant="outline"
                   size="md"
-                  className="text-slate-200 border-slate-700 hover:bg-slate-800 font-semibold"
+                  className="text-slate-200 border-slate-700 hover:bg-slate-800 font-semibold flex-1 sm:flex-initial"
                   leftIcon={<RefreshCw className="w-4 h-4" />}
                   onClick={handleRetake}
                 >
@@ -934,19 +839,19 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 <Button
                   variant="success"
                   size="md"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 shadow-lg border-emerald-500"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 shadow-lg border-emerald-500 flex-1 sm:flex-initial"
                   leftIcon={<Check className="w-4 h-4" />}
                   onClick={handleConfirmPhoto}
                 >
                   Use This Photo for Inspection
                 </Button>
               </>
-            ) : (
+            ) : !cameraError ? (
               <button
                 type="button"
                 onClick={handleShootPhoto}
                 disabled={isLoadingCamera}
-                className={`flex items-center space-x-2.5 px-6 py-2.5 rounded-lg font-bold text-sm text-white shadow-xl transition-all transform active:scale-95 cursor-pointer border ${
+                className={`w-full sm:w-auto justify-center flex items-center space-x-2.5 px-6 py-2.5 rounded-lg font-bold text-sm text-white shadow-xl transition-all transform active:scale-95 cursor-pointer border ${
                   isLoadingCamera
                     ? 'bg-slate-700 border-slate-600 opacity-50 cursor-not-allowed'
                     : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-400/50 hover:shadow-emerald-500/25 ring-2 ring-emerald-500/30'
@@ -957,7 +862,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                   {countdown !== null ? `Shooting in ${countdown}s...` : 'Shoot Photo Now'}
                 </span>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
